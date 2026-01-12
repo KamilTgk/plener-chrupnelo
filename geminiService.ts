@@ -29,7 +29,7 @@ Jesteś pasjonatem gotowania i twórcą kulinarnym. Używasz prostego, konkretne
 ZASADY OPERACYJNE (TRYB ONLINE):
 1. INSPIRACJA Z SIECI: Zawsze szukaj inspiracji w internecie przy użyciu Google Search.
 2. NAPRAWA LINKÓW: Weryfikuj sourceUrl przez Google Search.
-3. PRZYPRAWY: Każdy posiłek MUSI zawierać tablicę 'spices'.
+3. PRZYPRAWY: Każdy posiłek MUSI zawieraá tablicę 'spices'.
 4. SKŁADNIKI: Proporcje WYŁĄCZNIE w GRAMACH (g).
 5. OBRAZY: Generuj apetyczne prompty obrazowe dla potraw.
 6. PERSONALIZACJA: Dopasuj kalorie i składniki pod cele użytkownika.
@@ -53,7 +53,7 @@ export const getMealIcon = (name?: string): string => {
  */
 export const generateImage = async (prompt: string): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c" });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
@@ -75,7 +75,7 @@ export const generateImage = async (prompt: string): Promise<string> => {
 
 export const generateMealPlan = async (prefs: UserPreferences): Promise<DayPlan> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c" });
     const systemInstruction = `${BASE_SYSTEM_INSTRUCTION} Cel: ${prefs.targetCalories} kcal.`;
     
     const prompt = `ZAPLANUJ JADŁOSPIS ONLINE: Cel ${prefs.targetCalories} kcal, liczba posiłków: ${prefs.mealCount}. 
@@ -84,7 +84,7 @@ export const generateMealPlan = async (prefs: UserPreferences): Promise<DayPlan>
     Dostosuj nazewnictwo posiłków. Użyj Google Search do znalezienia najnowszych trendów kulinarnych.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash", // Poprawiony model na stabilny
+      model: "gemini-1.5-flash", 
       contents: prompt,
       config: { 
         systemInstruction,
@@ -130,7 +130,7 @@ export const generateMealPlan = async (prefs: UserPreferences): Promise<DayPlan>
 
 export const analyzeMealScan = async (textInput: string, weightInput: number, imageBase64?: string): Promise<Partial<Meal>> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c" });
     const parts: any[] = [];
     
     if (imageBase64) {
@@ -185,7 +185,7 @@ export const analyzeMealScan = async (textInput: string, weightInput: number, im
 
 export const generateFridgeRecipe = async (fridgeContent: string, time: number, difficulty: string, speed: string, prefs: UserPreferences): Promise<Meal> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c" });
     const systemInstruction = `Ekspert ZERO WASTE Online. Stwórz przepis z: ${fridgeContent}. Cel: ok. ${Math.round(prefs.targetCalories / 4)} kcal.`;
     const prompt = `KREATOR ZERO WASTE ONLINE: ${fridgeContent}. Czas: ${time}min. Styl: ${speed}.`;
 
@@ -220,7 +220,7 @@ export const generateFridgeRecipe = async (fridgeContent: string, time: number, 
 
 export const replaceSingleMeal = async (oldMeal: Meal, prefs: UserPreferences): Promise<Meal> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c" });
     const systemInstruction = `${BASE_SYSTEM_INSTRUCTION} Zamiennik dla posiłku o kaloryczności ${oldMeal.kcal} kcal.`;
     const prompt = `ZAPROPONUJ ZAMIENNIK ONLINE dla: "${oldMeal.name}". Cel: ${oldMeal.kcal} kcal. Respektuj wykluczenia: ${prefs.excludedIngredients}.`;
 
@@ -254,7 +254,7 @@ export const replaceSingleMeal = async (oldMeal: Meal, prefs: UserPreferences): 
 
 export const recalculateMealFromIngredients = async (meal: Meal, updatedIngredients: Ingredient[]): Promise<Meal> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c" });
     const prompt = `PRZELICZ WARTOŚCI ODŻYWCZE ONLINE: ${meal.name}. Składniki: ${updatedIngredients.map(i => `${i.item}: ${i.amount}g`).join(", ")}`;
 
     const response = await ai.models.generateContent({
@@ -279,7 +279,7 @@ export const recalculateMealFromIngredients = async (meal: Meal, updatedIngredie
 };
 
 export const chatWithGemini = async (messages: any[]) => {
-  const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
+  const ai = new GoogleGenAI({ apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c" });
   const response = await ai.models.generateContent({
     model: 'gemini-1.5-flash',
     contents: messages,
