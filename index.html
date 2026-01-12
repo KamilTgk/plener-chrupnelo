@@ -1,0 +1,58 @@
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plener Chrupnęło - Logistyka Smaku</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+      body { background-color: #0a0a0b; color: #f8fafc; margin: 0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: #0a0a0b; }
+      ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb:hover { background: #ff7a00; }
+      
+      .logistic-font { font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: -0.05em; }
+      
+      input[type=range] { -webkit-appearance: none; background: transparent; cursor: pointer; }
+      input[type=range]::-webkit-slider-runnable-track { height: 6px; background: #1f1f23; border-radius: 4px; }
+      input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #ff7a00; margin-top: -7px; box-shadow: 0 0 15px rgba(255, 122, 0, 0.4); border: 2px solid #0a0a0b; }
+
+      @keyframes shake {
+        0% { transform: translate(1px, 1px) rotate(0deg); }
+        10% { transform: translate(-1px, -2px) rotate(-1deg); }
+        20% { transform: translate(-3px, 0px) rotate(1deg); }
+        30% { transform: translate(3px, 2px) rotate(0deg); }
+        100% { transform: translate(1px, -2px) rotate(-1deg); }
+      }
+      .animate-shake { animation: shake 0.5s infinite; }
+    </style>
+    <script>
+      window.process = { env: { NODE_ENV: 'production' } };
+    </script>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "@google/genai": "https://esm.sh/@google/genai@0.10.0",
+    "firebase/app": "https://esm.sh/firebase@10.13.1/app",
+    "firebase/firestore": "https://esm.sh/firebase@10.13.1/firestore",
+    "firebase/auth": "https://esm.sh/firebase@10.13.1/auth",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

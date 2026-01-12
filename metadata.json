@@ -1,0 +1,8 @@
+
+{
+  "name": "plenerv1",
+  "description": "Smart meal planner for logistics fans and foodies.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
