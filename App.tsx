@@ -15,14 +15,10 @@ const firebaseConfig = {
   appId: "1:695554422212:web:b4ea9a37c62177748de091"
 };
 
-// Stabilna inicjalizacja
-let db: any = null;
-let auth: any = null;
-try {
-  const fbApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-  db = getFirestore(fbApp);
-  auth = getAuth(fbApp);
-} catch (e) { console.warn("Tryb podglądu offline"); }
+// Stabilna inicjalizacja logistyki
+const fbApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+const auth = getAuth(fbApp);
 
 const getToday = () => new Date().toISOString().split('T')[0];
 
@@ -30,7 +26,7 @@ const MacroBar = ({ label, current, target, color }: { label: string, current: n
   const pct = Math.min(100, (current / (target || 1)) * 100);
   return (
     <div className="flex-1 space-y-1">
-      <div className="flex justify-between text-[8px] font-black uppercase text-stone-500">
+      <div className="flex justify-between text-[8px] font-black uppercase text-stone-500 italic">
         <span>{label}</span>
         <span className="text-stone-300">{Math.round(current)}G / {Math.round(target)}G</span>
       </div>
@@ -48,6 +44,7 @@ export default function App() {
   const [selectedDate] = useState(getToday());
   const [loading, setLoading] = useState(false);
 
+  // Żelazna Zasada: Twoje parametry 2605 kcal są bazą startową
   const [profile, setProfile] = useState<BioProfile>({
     bio: { gender: 'male', age: 30, weight: 85, height: 185, activity: 1.4 },
     stats: { bmi: 24.8, bmr: 0, tdee: 0 },
@@ -57,7 +54,6 @@ export default function App() {
   const [plans, setPlans] = useState<Record<string, DayPlan>>({});
 
   useEffect(() => {
-    if (!auth) { setAuthLoading(false); return; }
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u && db) {
@@ -69,8 +65,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const calculated = useMemo(() => profile.goals, [profile]);
-
   const currentPlan = plans[selectedDate] || { 
     date: selectedDate, totalKcal: 0, meals: [], extraMeals: [], waterCurrent: 0, stepsCurrent: 0, 
     dailyActivity: { water: { goalMl: 2500 }, steps: { goal: 10000 } } 
@@ -81,11 +75,24 @@ export default function App() {
     setPlans(p => ({ ...p, [selectedDate]: newPlan }));
   };
 
-  if (authLoading) return <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center text-[#ff7a00] italic">Logistyka...</div>;
+  if (authLoading) return <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center text-[#ff7a00] italic logistic-font">Logistyka...</div>;
+
+  // Ekran logowania dla bezpieczeństwa Twoich danych
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0b] flex flex-col items-center justify-center p-8">
+        <h1 className="text-4xl italic text-[#ff7a00] mb-10 font-bold">Plener Chrupnęło</h1>
+        <div className="bg-[#161618] p-10 rounded-[3rem] border border-white/5 w-full max-w-sm space-y-6 text-center">
+           <p className="text-stone-500 text-xs uppercase font-black">Zaloguj się, aby odblokować 2605 kcal</p>
+           <button onClick={() => signInWithEmailAndPassword(auth, "admin@plener.pl", "twojehaslo")} className="w-full bg-[#ff7a00] text-black py-4 rounded-xl font-black">WEJDŹ DO PANELU</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0b] text-stone-100 flex flex-col max-w-xl mx-auto pb-32">
-      <header className="p-8 text-center border-b border-white/5">
+      <header className="p-8 text-center border-b border-white/5 sticky top-0 bg-[#0a0a0b]/80 backdrop-blur-md z-40">
         <h1 className="text-3xl italic font-bold">Plener <span className="text-[#ff7a00]">Chrupnęło</span></h1>
       </header>
 
@@ -95,18 +102,18 @@ export default function App() {
             <section className="bg-[#161618] p-8 rounded-[3rem] border border-white/5 space-y-6 shadow-2xl">
               <div className="flex justify-between items-end">
                 <div>
-                  <span className="text-[10px] uppercase text-stone-500 font-black tracking-widest">Paliwo Dziś</span>
+                  <span className="text-[10px] uppercase text-stone-500 font-black italic tracking-widest">Paliwo Dziś</span>
                   <div className="text-5xl text-[#ff7a00] italic font-bold">{currentPlan.totalKcal} <small className="text-sm">kcal</small></div>
                 </div>
-                <div className="text-right text-stone-500 text-xs font-bold uppercase">Cel: {calculated.targetKcal}</div>
+                <div className="text-right text-stone-500 text-xs font-bold uppercase italic">Cel: {profile.goals.targetKcal}</div>
               </div>
               <div className="h-3 bg-black rounded-full overflow-hidden border border-white/5">
-                <div className="h-full bg-gradient-to-r from-[#ff7a00] to-orange-400" style={{ width: `${Math.min(100, (currentPlan.totalKcal / calculated.targetKcal) * 100)}%` }} />
+                <div className="h-full bg-gradient-to-r from-[#ff7a00] to-orange-400" style={{ width: `${Math.min(100, (currentPlan.totalKcal / profile.goals.targetKcal) * 100)}%` }} />
               </div>
               <div className="flex gap-4">
-                <MacroBar label="B" current={0} target={calculated.protein} color="#3b82f6" />
-                <MacroBar label="T" current={0} target={calculated.fat} color="#f59e0b" />
-                <MacroBar label="W" current={0} target={calculated.carbs} color="#10b981" />
+                <MacroBar label="B" current={0} target={profile.goals.protein} color="#3b82f6" />
+                <MacroBar label="T" current={0} target={profile.goals.fat} color="#f59e0b" />
+                <MacroBar label="W" current={0} target={profile.goals.carbs} color="#10b981" />
               </div>
             </section>
 
@@ -119,26 +126,18 @@ export default function App() {
               <div className="h-2 bg-black rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-emerald-500 shadow-[0_0_10px_#10b981]" 
-                  style={{ width: `${Math.min(100, (currentPlan.stepsCurrent / (currentPlan.dailyActivity.steps.goal || 10000)) * 100)}%` }} 
+                  style={{ width: `${Math.min(100, (currentPlan.stepsCurrent / currentPlan.dailyActivity.steps.goal) * 100)}%` }} 
                 />
               </div>
               <input type="range" min="0" max="20000" value={currentPlan.stepsCurrent} onChange={e => updateCurrentPlan({ stepsCurrent: Number(e.target.value) })} className="w-full accent-[#ff7a00]" />
             </section>
             
-            <button className="w-full bg-[#ff7a00] text-black py-5 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Loguj Plan 🚀</button>
+            <button className="w-full bg-[#ff7a00] text-black py-5 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">LOGUJ PLAN 🚀</button>
           </div>
-        )}
-
-        {activeTab === 'body' && (
-           <div className="bg-[#161618] p-10 rounded-[4rem] border border-white/5 text-center space-y-4">
-              <h2 className="text-2xl italic text-[#ff7a00]">Profil BIO</h2>
-              <div className="text-5xl font-bold">{calculated.targetKcal} kcal</div>
-              <p className="text-stone-500 uppercase text-[10px] font-black">Zapotrzebowanie Dziennie</p>
-           </div>
         )}
       </main>
 
-      <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#161618]/90 backdrop-blur-2xl border border-white/10 rounded-full p-2 flex gap-1 shadow-2xl z-50">
+      <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#161618]/90 backdrop-blur-2xl border border-white/10 rounded-full p-2 flex gap-1 z-50">
         {[
           { id: 'meals', icon: '🍴', label: 'PLAN' },
           { id: 'scanner', icon: '📷', label: 'SKAN' },
@@ -150,12 +149,10 @@ export default function App() {
             className={`px-6 py-4 rounded-full flex flex-col items-center gap-1 transition-all ${activeTab === t.id ? 'bg-[#ff7a00] text-black scale-110 shadow-lg' : 'text-stone-600'}`}
           >
             <span className="text-xl">{t.icon}</span>
-            <span className="text-[7px] font-black uppercase tracking-tighter">{t.label}</span>
+            <span className="text-[7px] font-black uppercase tracking-tighter italic">{t.label}</span>
           </button>
         ))}
       </nav>
-
-      {loading && <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center italic text-[#ff7a00] text-2xl animate-pulse">Analiza AI...</div>}
     </div>
   );
 }
