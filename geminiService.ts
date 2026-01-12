@@ -1,13 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { collection, addDoc } from "firebase/firestore";
 
-// --- LOGISTYKA KONFIGURACJI ---
+// --- GLOBALNA DEFINICJA KLUCZA (KLUCZOWE DLA PRZEGLĄDARKI) ---
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
+const genAI = new GoogleGenAI(API_KEY);
 
-const getModel = () => {
-  const genAI = new GoogleGenAI(API_KEY);
-  return genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: "v1" });
-};
+// Inicjalizacja modelu na poziomie globalnym
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: "v1" });
 
 export const sanitizeForFirestore = (data: any) => JSON.parse(JSON.stringify(data));
 
@@ -35,37 +34,37 @@ export const getMealIcon = (name?: string): string => {
 export const generateImage = async (prompt: string) => "";
 
 export const generateMealPlan = async (prefs: any) => {
-  const model = getModel();
-  const prompt = `Zaplanuj jadłospis: ${prefs.targetCalories} kcal. Zwróć JSON z tablicą meals.`;
-  const result = await model.generateContent(prompt);
-  const data = cleanAndParseJSON(result.response.text());
-  return {
-    ...data,
-    meals: (data.meals || []).map((m: any) => ({
-      ...m,
-      id: Math.random().toString(36).substring(7),
-      icon: getMealIcon(m.name),
-      completed: false
-    }))
-  };
+  try {
+    const prompt = `Zaplanuj jadłospis: ${prefs.targetCalories} kcal. Zwróć JSON z tablicą meals.`;
+    const result = await model.generateContent(prompt);
+    const data = cleanAndParseJSON(result.response.text());
+    return {
+      ...data,
+      meals: (data.meals || []).map((m: any) => ({
+        ...m,
+        id: Math.random().toString(36).substring(7),
+        icon: getMealIcon(m.name),
+        completed: false
+      }))
+    };
+  } catch (e) {
+    throw new Error("Błąd AI: Sprawdź klucz API");
+  }
 };
 
 export const analyzeMealScan = async (text: string, weight: number, image?: string) => {
-  const model = getModel();
   const prompt = `Analizuj: ${text}, masa: ${weight}g. Podaj kcal i makro w JSON.`;
   const result = await model.generateContent(prompt);
   return { ...cleanAndParseJSON(result.response.text()), id: Math.random().toString(36).substring(7), completed: true };
 };
 
 export const generateFridgeRecipe = async (fridge: string, time: number, diff: string, speed: string, prefs: any) => {
-  const model = getModel();
   const prompt = `Przepis z: ${fridge}. Zwróć JSON.`;
   const result = await model.generateContent(prompt);
   return { ...cleanAndParseJSON(result.response.text()), id: Math.random().toString(36).substring(7) };
 };
 
 export const replaceSingleMeal = async (oldMeal: any, prefs: any) => {
-  const model = getModel();
   const result = await model.generateContent(`Zamiennik dla: ${oldMeal.name}. JSON.`);
   return { ...cleanAndParseJSON(result.response.text()), id: Math.random().toString(36).substring(7) };
 };
@@ -75,7 +74,6 @@ export const recalculateMealFromIngredients = async (meal: any, ingredients: any
 };
 
 export const chatWithGemini = async (messages: any[]) => {
-  const model = getModel();
   const result = await model.generateContent(messages.map(m => m.text).join("\n"));
   return result.response.text();
 };
