@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 import { DayPlan, UserPreferences, Meal, ImagePreferences, Ingredient } from "./types";
@@ -54,7 +53,7 @@ export const getMealIcon = (name?: string): string => {
  */
 export const generateImage = async (prompt: string): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
@@ -76,7 +75,7 @@ export const generateImage = async (prompt: string): Promise<string> => {
 
 export const generateMealPlan = async (prefs: UserPreferences): Promise<DayPlan> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
     const systemInstruction = `${BASE_SYSTEM_INSTRUCTION} Cel: ${prefs.targetCalories} kcal.`;
     
     const prompt = `ZAPLANUJ JADŁOSPIS ONLINE: Cel ${prefs.targetCalories} kcal, liczba posiłków: ${prefs.mealCount}. 
@@ -85,7 +84,7 @@ export const generateMealPlan = async (prefs: UserPreferences): Promise<DayPlan>
     Dostosuj nazewnictwo posiłków. Użyj Google Search do znalezienia najnowszych trendów kulinarnych.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash", // Poprawiony model na stabilny
       contents: prompt,
       config: { 
         systemInstruction,
@@ -131,7 +130,7 @@ export const generateMealPlan = async (prefs: UserPreferences): Promise<DayPlan>
 
 export const analyzeMealScan = async (textInput: string, weightInput: number, imageBase64?: string): Promise<Partial<Meal>> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
     const parts: any[] = [];
     
     if (imageBase64) {
@@ -160,7 +159,7 @@ export const analyzeMealScan = async (textInput: string, weightInput: number, im
     parts.push({ text: promptText });
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: { parts },
       config: {
         responseMimeType: "application/json",
@@ -186,12 +185,12 @@ export const analyzeMealScan = async (textInput: string, weightInput: number, im
 
 export const generateFridgeRecipe = async (fridgeContent: string, time: number, difficulty: string, speed: string, prefs: UserPreferences): Promise<Meal> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
     const systemInstruction = `Ekspert ZERO WASTE Online. Stwórz przepis z: ${fridgeContent}. Cel: ok. ${Math.round(prefs.targetCalories / 4)} kcal.`;
     const prompt = `KREATOR ZERO WASTE ONLINE: ${fridgeContent}. Czas: ${time}min. Styl: ${speed}.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: { 
         systemInstruction,
@@ -221,12 +220,12 @@ export const generateFridgeRecipe = async (fridgeContent: string, time: number, 
 
 export const replaceSingleMeal = async (oldMeal: Meal, prefs: UserPreferences): Promise<Meal> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
     const systemInstruction = `${BASE_SYSTEM_INSTRUCTION} Zamiennik dla posiłku o kaloryczności ${oldMeal.kcal} kcal.`;
     const prompt = `ZAPROPONUJ ZAMIENNIK ONLINE dla: "${oldMeal.name}". Cel: ${oldMeal.kcal} kcal. Respektuj wykluczenia: ${prefs.excludedIngredients}.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: { 
         systemInstruction, 
@@ -245,7 +244,7 @@ export const replaceSingleMeal = async (oldMeal: Meal, prefs: UserPreferences): 
       currentStep: 0, 
       completed: false, 
       spices: m.spices || [], 
-      ingredients: m.ingredients || [],
+      ingredients: m.ingredients || [], 
       steps: m.steps || ["Rozpocznij przygotowanie zamiennika."]
     };
   } catch (error) {
@@ -255,14 +254,14 @@ export const replaceSingleMeal = async (oldMeal: Meal, prefs: UserPreferences): 
 
 export const recalculateMealFromIngredients = async (meal: Meal, updatedIngredients: Ingredient[]): Promise<Meal> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
     const prompt = `PRZELICZ WARTOŚCI ODŻYWCZE ONLINE: ${meal.name}. Składniki: ${updatedIngredients.map(i => `${i.item}: ${i.amount}g`).join(", ")}`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: { 
-        responseMimeType: "application/json",
+        responseMimeType: "application/json", 
         systemInstruction: "Kalkulator kalorii i makroskładników online korzystający z najświeższych baz danych żywności."
       }
     });
@@ -280,9 +279,9 @@ export const recalculateMealFromIngredients = async (meal: Meal, updatedIngredie
 };
 
 export const chatWithGemini = async (messages: any[]) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: "AIzaSyAFryvqf0ktCil0QyjdHfjmN2ZFAhHHe7A" });
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-1.5-flash',
     contents: messages,
     config: { systemInstruction: "Asystent kulinarny Plener Chrupnęło. Pomoc online w czasie rzeczywistym." }
   });
