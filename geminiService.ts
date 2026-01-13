@@ -1,12 +1,11 @@
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 
-// LISTA ADRESÓW DO SPRAWDZENIA (Priorytety)
-// System spróbuje połączyć się z każdym po kolei, aż któryś zadziała.
+// LISTA ADRESÓW (Naprawiona: mieszanka v1beta i v1 dla pewności)
 const ENDPOINTS = [
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`,
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}` // Wersja v1 (stabilna) jako ostateczny ratunek
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -22,13 +21,12 @@ const safeParse = (text: string | undefined) => {
 };
 
 async function callGemini(prompt: string, imageBase64?: string) {
+  // UWAGA: Usunięto 'generationConfig' z wymuszaniem JSON, 
+  // ponieważ starsze modele (gemini-pro) tego nie obsługują i wyrzucają błąd.
   const requestBody: any = {
     contents: [{
       parts: [{ text: prompt }]
-    }],
-    generationConfig: {
-        responseMimeType: "application/json"
-    }
+    }]
   };
 
   // Obsługa zdjęcia (tylko jeśli jest)
@@ -42,10 +40,12 @@ async function callGemini(prompt: string, imageBase64?: string) {
     });
   }
 
-  // PĘTLA RATUNKOWA: Próbujemy każdego modelu po kolei
+  // PĘTLA RATUNKOWA
   for (const url of ENDPOINTS) {
     try {
-      console.log(`Próba połączenia z: ${url.split('/models/')[1].split(':')[0]}...`);
+      // Wyciągamy nazwę modelu z URL dla logów
+      const modelName = url.includes("models/") ? url.split("models/")[1].split(":")[0] : "AI";
+      console.log(`Próba: ${modelName}...`);
       
       const response = await fetch(url, {
         method: "POST",
@@ -54,45 +54,45 @@ async function callGemini(prompt: string, imageBase64?: string) {
       });
 
       if (!response.ok) {
-        // Jeśli błąd 404 lub inny, rzucamy błąd, żeby pętla przeszła do następnego modelu
-        throw new Error(`Błąd HTTP: ${response.status}`);
+        // Jeśli ten model nie działa (404/500), idź do następnego
+        throw new Error(`Status: ${response.status}`);
       }
 
       const data = await response.json();
+      
+      // Bezpieczne wyciąganie tekstu
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
       if (!text) throw new Error("Pusta treść");
 
-      console.log("✅ SUKCES! Połączono.");
+      console.log(`✅ SUKCES z modelem: ${modelName}`);
       return safeParse(text);
 
     } catch (e) {
-      console.warn("Model nie odpowiedział, próbuję następnego...", e);
-      // Kontynuuj pętlę do następnego adresu
-      continue;
+      console.warn(`Nieudana próba, sprawdzam kolejny model...`);
+      continue; // Skok do następnego adresu w liście ENDPOINTS
     }
   }
 
-  // Jeśli pętla się skończy i nic nie zadziałało:
-  throw new Error("Wszystkie modele AI są niedostępne. Sprawdź limity konta Google.");
+  throw new Error("BŁĄD KRYTYCZNY: Żaden model AI nie odpowiedział. Sprawdź limity Google.");
 }
 
 // --- EKSPOATOWANE FUNKCJE ---
 
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
-  const prompt = `Jesteś kucharzem. Mam: ${stock}. Stwórz 1 przepis. Zwróć JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
+  const prompt = `Jesteś kucharzem. Mam: ${stock}. Stwórz 1 przepis. Zwróć sam czysty JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
   return await callGemini(prompt);
 };
 
 export const analyzeMealScan = async (image: string, foodName: string, weight: string) => {
-  const prompt = `Oszacuj makro dla: ${foodName || "Danie"}, Waga: ${weight || "Standard"}. Zwróć JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
-  return await callGemini(prompt, image); // Tu przekazujemy zdjęcie
+  const prompt = `Oszacuj makro dla: ${foodName || "Danie"}, Waga: ${weight || "Standard"}. Zwróć sam czysty JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
+  return await callGemini(prompt, image);
 };
 
 export const generateMealPlan = async (config: any) => {
   const goalText = config.goalMode === 'cut' ? 'Redukcja' : 'Masa';
-  const prompt = `Plan diety 1 dzień: ${config.targetCalories} kcal (${goalText}). Kuchnia: ${config.cuisine}. Posiłków: ${config.mealCount}. Zwróć JSON: { "totalKcal": 0, "meals": [{ "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }] }`;
+  const prompt = `Plan diety 1 dzień: ${config.targetCalories} kcal (${goalText}). Kuchnia: ${config.cuisine}. Posiłków: ${config.mealCount}. Zwróć sam czysty JSON: { "totalKcal": 0, "meals": [{ "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }] }`;
   const data = await callGemini(prompt);
   return { ...data, meals: data.meals.map((m: any) => ({ ...m, completed: false })) };
 };
