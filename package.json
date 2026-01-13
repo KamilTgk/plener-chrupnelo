@@ -8,11 +8,11 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
+ "dependencies": {
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "@google/genai": "0.10.0",
-    "firebase": "^12.7.0"
+    "@google/generative-ai": "^0.21.0",
+    "firebase": "^10.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
