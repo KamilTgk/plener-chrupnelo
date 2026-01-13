@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-const MODELS = ["gemini-1.5-flash", "gemini-pro"];
+const MODELS = ["gemini-1.5-flash", "gemini-1.5-pro"];
 
 // Pomocnik do czyszczenia odpowiedzi JSON od AI
 const parseAIJSON = (text: string) => {
