@@ -5,7 +5,6 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, creat
 import { generateMealPlan, sanitizeForFirestore } from './geminiService';
 import { DayPlan, BioProfile } from './types';
 
-// TWOJA KONFIGURACJA ZGODNA Z FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyD82LdmA6ry5mqPUsbhKPlnHw3V5C5uEK4",
   authDomain: "panel-chrupnelo.firebaseapp.com",
