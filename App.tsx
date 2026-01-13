@@ -7,8 +7,8 @@ import { DayPlan, BioProfile } from './types';
 
 const firebaseConfig = {
   apiKey: "AIzaSyD82LdmA6ry5mqPUsbhKPlnHw3V5C5uEK4",
-  authDomain: "panel-chrupnelo.firebaseapp.com",
   projectId: "panel-chrupnelo",
+  authDomain: "panel-chrupnelo.firebaseapp.com",
   storageBucket: "panel-chrupnelo.firebasestorage.app",
   messagingSenderId: "695554422212",
   appId: "1:695554422212:web:b4ea9a37c62177748de091"
