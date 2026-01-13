@@ -1,7 +1,13 @@
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 
-// ZMIANA: Używamy wersji v1 (stabilnej) i modelu gemini-pro (klasyk)
-const BASE_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+// LISTA ADRESÓW DO SPRAWDZENIA (Priorytety)
+// System spróbuje połączyć się z każdym po kolei, aż któryś zadziała.
+const ENDPOINTS = [
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`,
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`
+];
 
 const safeParse = (text: string | undefined) => {
   if (!text) throw new Error("Pusta odpowiedź od AI.");
@@ -11,39 +17,64 @@ const safeParse = (text: string | undefined) => {
     return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
   } catch (e) {
     console.error("Błąd parsowania:", text);
-    throw new Error("AI zwróciło nieprawidłowy format.");
+    throw new Error("AI zwróciło błąd formatowania.");
   }
 };
 
 async function callGemini(prompt: string, imageBase64?: string) {
-  // UWAGA: gemini-pro (v1) nie obsługuje obrazków w ten sam sposób co Flash.
-  // Dla stabilności w tej wersji wyłączamy przesyłanie obrazka, jeśli powoduje błędy,
-  // ale zostawiamy logikę tekstową, która jest kluczowa.
-  
-  const endpoint = `${BASE_URL}?key=${API_KEY}`;
-  
-  const requestBody = {
+  const requestBody: any = {
     contents: [{
       parts: [{ text: prompt }]
-    }]
+    }],
+    generationConfig: {
+        responseMimeType: "application/json"
+    }
   };
 
-  // Logika bezpiecznego połączenia
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody)
-  });
-
-  if (!response.ok) {
-    const errorData = await response.text();
-    console.error("Błąd API Google:", errorData);
-    throw new Error(`Błąd połączenia (${response.status}). Sprawdź konsolę.`);
+  // Obsługa zdjęcia (tylko jeśli jest)
+  if (imageBase64) {
+    const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
+    requestBody.contents[0].parts.push({
+      inlineData: {
+        mimeType: "image/png",
+        data: cleanBase64
+      }
+    });
   }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  return safeParse(text);
+  // PĘTLA RATUNKOWA: Próbujemy każdego modelu po kolei
+  for (const url of ENDPOINTS) {
+    try {
+      console.log(`Próba połączenia z: ${url.split('/models/')[1].split(':')[0]}...`);
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        // Jeśli błąd 404 lub inny, rzucamy błąd, żeby pętla przeszła do następnego modelu
+        throw new Error(`Błąd HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (!text) throw new Error("Pusta treść");
+
+      console.log("✅ SUKCES! Połączono.");
+      return safeParse(text);
+
+    } catch (e) {
+      console.warn("Model nie odpowiedział, próbuję następnego...", e);
+      // Kontynuuj pętlę do następnego adresu
+      continue;
+    }
+  }
+
+  // Jeśli pętla się skończy i nic nie zadziałało:
+  throw new Error("Wszystkie modele AI są niedostępne. Sprawdź limity konta Google.");
 }
 
 // --- EKSPOATOWANE FUNKCJE ---
@@ -55,9 +86,8 @@ export const generateRecipeFromInventory = async (items: {name: string, weight: 
 };
 
 export const analyzeMealScan = async (image: string, foodName: string, weight: string) => {
-  // W wersji gemini-pro (v1) analizujemy tylko tekst (nazwę i wagę), bo model wizyjny wymaga innej konfiguracji
-  const prompt = `Oszacuj makro dla dania: ${foodName || "Danie"}, Waga: ${weight || "Standard"}. Zwróć JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
-  return await callGemini(prompt);
+  const prompt = `Oszacuj makro dla: ${foodName || "Danie"}, Waga: ${weight || "Standard"}. Zwróć JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
+  return await callGemini(prompt, image); // Tu przekazujemy zdjęcie
 };
 
 export const generateMealPlan = async (config: any) => {
