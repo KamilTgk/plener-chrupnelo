@@ -54,6 +54,7 @@ const MacroBar = ({ label, current, target, color }: { label: string, current: n
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
+  const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [activeTab, setActiveTab] = useState<'meals' | 'scanner' | 'body' | 'inventory'>('meals');
   const [planViewMode, setPlanViewMode] = useState<'day' | 'week' | 'month'>('day');
@@ -66,7 +67,6 @@ export default function App() {
   const [savedRecipes, setSavedRecipes] = useState<any[]>([]);
   const [inventoryFilter, setInventoryFilter] = useState("Wszystkie");
   
-  // --- MODAL DODAWANIA DO PLANU ---
   const [planModal, setPlanModal] = useState<{show: boolean, recipe: any | null}>({show: false, recipe: null});
 
   // --- STANY SKANERA ---
@@ -98,7 +98,11 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u || null));
   }, []);
 
-  const handleAuth = () => signInWithEmailAndPassword(auth, "tester1@chrupnelo.pl", pass).catch(() => alert("Błąd logowania!"));
+  const handleAuth = () => {
+      if(!email || !pass) return alert("Podaj email i hasło!");
+      signInWithEmailAndPassword(auth, email, pass)
+      .catch((e) => alert("Błąd logowania: " + e.code));
+  };
 
   // --- PERSYSTENCJA I CZYSZCZENIE ---
   useEffect(() => {
@@ -110,7 +114,7 @@ export default function App() {
 
     let loadedPlans = d.p ? JSON.parse(d.p) : {};
     
-    // 2. 30-Day Auto Cleanup Logic
+    // Auto Cleanup 30 dni
     const today = new Date();
     const cutoff = new Date(today);
     cutoff.setDate(today.getDate() - 30);
@@ -127,9 +131,7 @@ export default function App() {
       }
     });
 
-    if (wasCleaned) {
-        console.log("System operacyjny usunął przestarzałe dane (>30 dni).");
-    }
+    if (wasCleaned) console.log("System operacyjny usunął stare dane.");
 
     setPlans(cleanedPlans);
     if (d.pr) setProfile(JSON.parse(d.pr)); 
@@ -151,34 +153,29 @@ export default function App() {
             localStorage.setItem('pl_r', JSON.stringify(savedRecipes));
         } catch (e: any) {
             if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-                alert("⚠️ Brak miejsca w pamięci urządzenia! AI automatycznie oczyści najstarsze archiwa zdjęć, aby zapisać nowe dane.");
-                
-                // Emergency Cleanup: Sort plans by date, remove images from oldest 7 days
+                alert("⚠️ Brak miejsca! Czyszczę stare zdjęcia...");
                 const sortedDates = Object.keys(plans).sort();
                 const oldestDates = sortedDates.slice(0, 7);
-                
                 const lighterPlans = { ...plans };
                 oldestDates.forEach(date => {
                     if (lighterPlans[date]) {
                         lighterPlans[date] = {
                             ...lighterPlans[date],
                             meals: lighterPlans[date].meals?.map((m: any) => {
-                                const { imageUrl, ...rest } = m; // Strip image
+                                const { imageUrl, ...rest } = m; 
                                 return rest;
                             })
                         };
                     }
                 });
-                
                 setPlans(lighterPlans);
             }
         }
     };
-    
     saveData();
   }, [plans, profile, water, steps, inventory, savedRecipes]);
 
-  // --- LOGIKA OBLICZENIOWA ---
+  // --- OBLICZENIA ---
   const calculated = useMemo(() => {
     const { weight, height, age, gender, activity } = profile.bio;
     const { proteinPct, fatPct, carbsPct, correction } = profile.goals;
@@ -285,21 +282,13 @@ export default function App() {
             completed: false
         };
 
-        // Replace the specific meal slot
         if (mealIndex >= 0 && mealIndex < currentMeals.length) {
             currentMeals[mealIndex] = newMeal;
         } else {
-            // Append if out of bounds (flexibility)
             currentMeals.push(newMeal);
         }
 
-        return {
-            ...prev,
-            [targetDate]: {
-                ...prev[targetDate],
-                meals: currentMeals
-            }
-        };
+        return { ...prev, [targetDate]: { ...prev[targetDate], meals: currentMeals } };
     });
 
     setPlanModal({show: false, recipe: null});
@@ -307,7 +296,7 @@ export default function App() {
   };
 
   const handleSmartScan = async () => {
-    if (!selectedImage && !manualFood) return alert("Dodaj dane!");
+    if (!selectedImage && !manualFood) return alert("Dodaj zdjęcie lub nazwę!");
     setLoading(true);
     try {
       const result = await analyzeMealScan(selectedImage || "", manualFood, manualWeight);
@@ -360,7 +349,6 @@ export default function App() {
     }
   };
 
-  // Strategy Handler
   const setStrategy = (mode: 'cut' | 'maintain' | 'bulk' | 'custom', val: number) => {
     setProfile(prev => ({
         ...prev,
@@ -371,6 +359,7 @@ export default function App() {
       <div className="min-h-screen bg-[#0a0a0b] text-white flex flex-col items-center justify-center p-6 text-center">
         <h1 className="text-4xl italic font-black mb-8 italic">Plener <span className="text-[#ff7a00]">Chrupnęło</span></h1>
         <div className="w-full max-w-xs space-y-4">
+            <input type="email" placeholder="Email (np. tester1@chrupnelo.pl)" className="w-full bg-[#161618] p-4 rounded-xl border border-white/10 text-center outline-none focus:border-[#ff7a00]" value={email} onChange={e => setEmail(e.target.value)} />
             <input type="password" placeholder="Hasło" className="w-full bg-[#161618] p-4 rounded-xl border border-white/10 text-center outline-none focus:border-[#ff7a00]" value={pass} onChange={e => setPass(e.target.value)} />
             <button onClick={handleAuth} className="w-full bg-[#ff7a00] text-black py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#ff8c20] active:scale-95 transition-all">WJEDŹ 🚀</button>
         </div>
@@ -584,13 +573,13 @@ export default function App() {
                 }} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
               </div>
               <div className="space-y-4">
-                <input placeholder="Nazwa dania..." value={manualFood} onChange={(e) => setManualFood(e.target.value)} className="w-full bg-[#0a0a0b] border border-white/5 p-4 rounded-2xl text-[10px] font-black italic outline-none focus:border-[#ff7a00] text-center" />
+                <input placeholder="Nazwa dania..." value={manualFood} onChange={(e) => setManualFood(e.target.value)} className="w-full bg-[#0a0a0b] border border-white/5 p-4 rounded-2xl text-[10px] font-black italic text-center outline-none focus:border-[#ff7a00]" />
                 <div className="relative">
-                  <input type="number" placeholder="Waga (g)" value={manualWeight} onChange={(e) => setManualWeight(e.target.value)} className="w-full bg-[#0a0a0b] border border-white/5 p-4 rounded-2xl text-[10px] font-black italic outline-none focus:border-[#ff7a00] text-center" />
+                  <input type="number" placeholder="Waga (g)" value={manualWeight} onChange={(e) => setManualWeight(e.target.value)} className="w-full bg-[#0a0a0b] border border-white/5 p-4 rounded-2xl text-[10px] font-black italic text-center outline-none focus:border-[#ff7a00]" />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-stone-600 uppercase">G</span>
                 </div>
               </div>
-              <button onClick={handleSmartScan} className="w-full bg-[#ff7a00] text-black py-5 rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl">Analizuj AI ⚙️</button>
+              <button onClick={handleSmartScan} className="w-full bg-[#ff7a00] text-black py-5 rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl active:scale-95 transition-all">Analizuj AI ⚙️</button>
               {scanResult && (
                 <div className="bg-[#0a0a0b] p-6 rounded-[3rem] border border-[#ff7a00]/20 animate-in slide-in-from-top mt-4">
                   <h3 className="text-[#ff7a00] font-black italic text-xl uppercase leading-none">{scanResult.name}</h3>
@@ -738,7 +727,7 @@ export default function App() {
         {activeTab === 'inventory' && (
           <div className="space-y-6 animate-in slide-in-from-right duration-500 pb-20">
             <section className="bg-[#161618] p-8 rounded-[3.5rem] border border-[#27272a] shadow-2xl space-y-6 text-center">
-              <div className="flex items-center gap-3"><span className="text-2xl">🧊</span><h3 className="text-lg font-black italic uppercase">Lodówka</h3></div>
+              <div className="flex items-center gap-3 justify-center"><span className="text-2xl">🧊</span><h3 className="text-lg font-black italic uppercase tracking-widest">Lodówka</h3></div>
               <div className="flex gap-2">
                 <input placeholder="Składnik..." value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} className="flex-[2] bg-[#0a0a0b] border border-white/5 p-4 rounded-2xl text-[10px] font-black italic outline-none focus:border-[#ff7a00] text-center" />
                 <input type="number" placeholder="Waga (g)" value={newItem.weight} onChange={(e) => setNewItem({...newItem, weight: e.target.value})} className="flex-1 bg-[#0a0a0b] border border-white/5 p-4 rounded-2xl text-[10px] font-black italic outline-none focus:border-[#ff7a00] text-center" />
