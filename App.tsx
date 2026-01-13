@@ -6,7 +6,7 @@ import { generateMealPlan, sanitizeForFirestore } from './geminiService';
 import { DayPlan, BioProfile } from './types';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD82LdmA6ry5mqPUsbhKPlnHw3V5C5uEK4",
+  apiKey: "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c",
   projectId: "panel-chrupnelo",
   authDomain: "panel-chrupnelo.firebaseapp.com",
   storageBucket: "panel-chrupnelo.firebasestorage.app",
