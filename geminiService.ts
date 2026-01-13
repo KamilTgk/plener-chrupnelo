@@ -1,19 +1,16 @@
-// Twój NOWY klucz (jest poprawny, bo zwrócił błąd 429, a nie błąd autoryzacji):
+// Twój NOWY klucz (zostawiamy go, jest dobry):
 const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
-// LISTA "SNAJPERSKA" - Celujemy w modele o wysokiej dostępności
+// LISTA ADRESÓW - Przywracamy ten, który odpowiedział (nawet błędem 429)
 const ENDPOINTS = [
-  // 1. Flash 8B - To jest "lekki" model, który rzadko jest przeciążony (idealny na teraz)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`,
+  // 1. Model Eksperymentalny 2.0 (Ten, który dał znak życia wcześniej!)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
   
-  // 2. Gemini Pro (v1) - Stary, stabilny klasyk. Działa prawie zawsze.
-  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
+  // 2. Standardowy Flash (Beta)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
   
-  // 3. Wersja "sztywna" 001 - Czasami ogólna nazwa nie działa, a konkretny numer tak
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${API_KEY}`,
-  
-  // 4. Wersja "sztywna" 002
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${API_KEY}`
+  // 3. Wersja "Latest" (Czasami działa lepiej w UE)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -57,8 +54,14 @@ async function callGemini(prompt: string, imageBase64?: string) {
         body: JSON.stringify(requestBody)
       });
 
+      // Jeśli 429 (Zajęty) -> To dobry znak! Oznacza, że klucz działa.
+      // Ale musimy spróbować innego lub poczekać.
+      if (response.status === 429) {
+         console.warn(`⚠️ Model ${modelName} jest przeciążony (429). Próbuję następnego...`);
+         continue;
+      }
+
       if (!response.ok) {
-        // Ignorujemy błędy 404 (nie znaleziono) i 429 (zajęte) i idziemy dalej
         console.warn(`⚠️ Model ${modelName} niedostępny (Status: ${response.status})`);
         continue; 
       }
@@ -76,7 +79,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
     }
   }
 
-  throw new Error("Wszystkie linie zajęte. Spróbuj za minutę (Błąd 429/404).");
+  throw new Error("Serwery Google są przeciążone (429) lub niedostępne. Odczekaj minutę i spróbuj ponownie.");
 }
 
 // --- EKSPOATOWANE FUNKCJE ---
