@@ -1,12 +1,19 @@
-// TU WKLEJ TEN NOWY KLUCZ Z AI STUDIO (utworzony przed chwilą):
-const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ"; 
+// Twój NOWY klucz (jest poprawny, bo zwrócił błąd 429, a nie błąd autoryzacji):
+const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
-// Używamy modelu "gemini-1.5-flash" na stabilnym łączu v1beta.
-// To jest domyślny model dla nowych kluczy z AI Studio.
+// LISTA "SNAJPERSKA" - Celujemy w modele o wysokiej dostępności
 const ENDPOINTS = [
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`
+  // 1. Flash 8B - To jest "lekki" model, który rzadko jest przeciążony (idealny na teraz)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`,
+  
+  // 2. Gemini Pro (v1) - Stary, stabilny klasyk. Działa prawie zawsze.
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
+  
+  // 3. Wersja "sztywna" 001 - Czasami ogólna nazwa nie działa, a konkretny numer tak
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${API_KEY}`,
+  
+  // 4. Wersja "sztywna" 002
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -42,7 +49,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
   for (const url of ENDPOINTS) {
     try {
       const modelName = url.split("/models/")[1].split(":")[0];
-      console.log(`📡 Próba połączenia z nowym kluczem: ${modelName}...`);
+      console.log(`📡 Próba połączenia: ${modelName}...`);
       
       const response = await fetch(url, {
         method: "POST",
@@ -51,7 +58,8 @@ async function callGemini(prompt: string, imageBase64?: string) {
       });
 
       if (!response.ok) {
-        console.warn(`⚠️ Błąd ${response.status} dla ${modelName}`);
+        // Ignorujemy błędy 404 (nie znaleziono) i 429 (zajęte) i idziemy dalej
+        console.warn(`⚠️ Model ${modelName} niedostępny (Status: ${response.status})`);
         continue; 
       }
 
@@ -60,7 +68,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
       
       if (!text) throw new Error("Pusta treść");
 
-      console.log(`✅ SUKCES!`);
+      console.log(`✅ SUKCES! Połączono z: ${modelName}`);
       return safeParse(text);
 
     } catch (e) {
@@ -68,7 +76,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
     }
   }
 
-  throw new Error("BŁĄD: Nowy klucz też nie działa? Sprawdź czy skopiowałeś go w całości.");
+  throw new Error("Wszystkie linie zajęte. Spróbuj za minutę (Błąd 429/404).");
 }
 
 // --- EKSPOATOWANE FUNKCJE ---
