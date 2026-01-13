@@ -1,13 +1,13 @@
-// Twój STARY klucz (ten oryginalny z projektu):
+// Twój STARY, ORYGINALNY klucz:
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 
-// LISTA ADRESÓW (Mieszanka wersji beta i stabilnej v1)
+// Sprawdzamy 3 pancerne adresy:
 const ENDPOINTS = [
-  // 1. Wersja Stabilna v1 (Najpewniejsza dla modelu Pro)
+  // 1. Wersja Stabilna v1 (Najpewniejsza)
   `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
-  // 2. Wersja Beta dla Flasha (Najszybsza)
+  // 2. Wersja Beta Flash (Szybka)
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-  // 3. Wersja Stabilna v1 dla Flasha
+  // 3. Wersja Stabilna Flash
   `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`
 ];
 
@@ -55,7 +55,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
 
       if (!response.ok) {
         console.warn(`⚠️ Błąd ${response.status} dla ${modelName}`);
-        continue; // Idziemy do następnego adresu
+        continue; 
       }
 
       const data = await response.json();
@@ -71,10 +71,10 @@ async function callGemini(prompt: string, imageBase64?: string) {
     }
   }
 
-  throw new Error("BŁĄD: Wejdź w Google Cloud i zaznacz 'Nie ograniczaj klucza'!");
+  throw new Error("BŁĄD: Upewnij się, że w Google Cloud zaznaczyłeś 'Nie ograniczaj klucza'!");
 }
 
-// --- EKSPOATOWANE FUNKCJE ---
+// --- FUNKCJE APLIKACJI ---
 
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
