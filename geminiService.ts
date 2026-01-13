@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // NOWY KLUCZ Z GOOGLE CLOUD
-const API_KEY = "AIzaSyD82LdmA6ry5mqPUsbhKPlnHw3V5C5uEK4";
+const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 export const sanitizeForFirestore = (data: any) => JSON.parse(JSON.stringify(data));
