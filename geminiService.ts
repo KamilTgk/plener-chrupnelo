@@ -1,37 +1,60 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// NOWY KLUCZ Z GOOGLE CLOUD
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-export const sanitizeForFirestore = (data: any) => JSON.parse(JSON.stringify(data));
+const MODELS = ["gemini-1.5-flash", "gemini-pro"];
 
-const cleanAndParseJSON = (text: string | undefined) => {
-  if (!text) throw new Error("Błąd AI");
-  const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/) || cleaned.match(/\[[\s\S]*\]/);
-  return JSON.parse(jsonMatch![0]);
+// Pomocnik do czyszczenia odpowiedzi JSON od AI
+const parseAIJSON = (text: string) => {
+  const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error("Nieprawidłowy format danych AI");
+  return JSON.parse(jsonMatch[0]);
 };
 
-export const generateMealPlan = async (prefs: any) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const prompt = `Zaplanuj jadłospis: ${prefs.targetCalories} kcal. Zwróć JSON z tablicą 'meals'.`;
-  const result = await model.generateContent(prompt);
-  return { ...cleanAndParseJSON(result.response.text()), id: Math.random().toString(36).substring(7) };
+export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
+  const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
+  for (const modelName of MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const prompt = `Jesteś szefem kuchni aplikacji Plener Chrupnęło. Stwórz JEDEN konkretny przepis z tych składników: ${stock}. Zwróć WYŁĄCZNIE JSON: { "name": "...", "ingredients": ["..."], "instructions": ["..."] }`;
+      const result = await model.generateContent(prompt);
+      return parseAIJSON(result.response.text());
+    } catch (e) { console.error(`Błąd modelu ${modelName}:`, e); continue; }
+  }
+  throw new Error("Błąd Magazynu AI");
 };
 
-export const analyzeMealScan = async (text: string, weight: number) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const prompt = `Analizuj: ${text}, masa: ${weight}g. Podaj kcal i makro w JSON.`;
-  const result = await model.generateContent(prompt);
-  return { ...cleanAndParseJSON(result.response.text()), id: Math.random().toString(36).substring(7), completed: true };
+export const analyzeMealScan = async (image: string, foodName: string, weight: string) => {
+  for (const modelName of MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const prompt = `Analizuj posiłek dla sportowca. Nazwa: ${foodName}, Masa: ${weight}g. Podaj precyzyjne makro. Zwróć WYŁĄCZNIE JSON: { "name": "...", "kcal": ..., "protein": ..., "fat": ..., "carbs": ... }`;
+      
+      let result;
+      if (image && image.includes("base64")) {
+        result = await model.generateContent([
+          prompt,
+          { inlineData: { data: image.split(',')[1], mimeType: "image/png" } }
+        ]);
+      } else {
+        result = await model.generateContent(prompt);
+      }
+      return parseAIJSON(result.response.text());
+    } catch (e) { console.error(`Błąd skanera ${modelName}:`, e); continue; }
+  }
+  throw new Error("Błąd Skanera AI");
 };
 
-// Eksporty pomocnicze
-export const replaceSingleMeal = async () => ({});
-export const chatWithGemini = async () => "";
-export const savePlanToFirestore = async () => {};
-export const generateFridgeRecipe = async () => ({});
-export const getMealIcon = () => '🍽️';
-export const recalculateMealFromIngredients = async (m: any) => m;
-export const generateImage = async () => "";
+export const generateMealPlan = async (config: any) => {
+  for (const modelName of MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const prompt = `Zaplanuj jadłospis sportowy: ${config.targetCalories} kcal. Kuchnia: ${config.cuisine}. Wykluczenia: ${config.exclusions}. Ilość posiłków: ${config.mealCount}. Zwróć WYŁĄCZNIE JSON: { "meals": [{ "name": "...", "kcal": ..., "protein": ..., "fat": ..., "carbs": ..., "ingredients": ["..."], "instructions": ["..."] }], "totalKcal": ... }`;
+      const result = await model.generateContent(prompt);
+      return parseAIJSON(result.response.text());
+    } catch (e) { console.error(`Błąd generatora ${modelName}:`, e); continue; }
+  }
+  throw new Error("Błąd Generatora AI");
+};
