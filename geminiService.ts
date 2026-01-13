@@ -1,18 +1,16 @@
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 
-// NOWA LISTA: Celujemy w konkretne, sztywne wersje modeli, a nie ogólne nazwy.
-// To eliminuje błąd 404 "Model not found".
+// LISTA PANCERNA: Mieszamy wersje Beta i Stabilne (v1).
+// Jeśli Beta (testowa) nie działa, v1 (oficjalna) MUSI zadziałać.
 const ENDPOINTS = [
-  // Najnowszy stabilny Flash (największa szansa sukcesu)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`,
-  // Konkretna wersja 001 (zawsze dostępna)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${API_KEY}`,
-  // Nowa wersja 002
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${API_KEY}`,
-  // Wersja 8b (bardzo szybka i tania, rzadko przeciążona)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`,
-  // Ostatnia deska ratunku - stary Pro w wersji beta
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`
+  // 1. Flash na wersji STABILNEJ (v1) - to powinno rozwiązać problem 404
+  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+  
+  // 2. Flash na wersji Beta (jako zapas)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+  
+  // 3. Klasyczny Gemini Pro na wersji STABILNEJ (v1) - najbardziej niezawodny
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -28,14 +26,14 @@ const safeParse = (text: string | undefined) => {
 };
 
 async function callGemini(prompt: string, imageBase64?: string) {
-  // UWAGA: Usunąłem wymuszanie JSON w configu, bo starsze wersje tego nie lubią.
-  // Polegamy na instrukcji w tekście prompta.
+  // Budujemy ciało zapytania
   const requestBody: any = {
     contents: [{
       parts: [{ text: prompt }]
     }]
   };
 
+  // Jeśli jest zdjęcie, dodajemy je
   if (imageBase64) {
     const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
     requestBody.contents[0].parts.push({
@@ -46,12 +44,13 @@ async function callGemini(prompt: string, imageBase64?: string) {
     });
   }
 
-  // PĘTLA RATUNKOWA
+  // PĘTLA PO ADRESACH
   for (const url of ENDPOINTS) {
     try {
-      // Wyciągamy nazwę modelu dla logów (np. gemini-1.5-flash-001)
-      const modelName = url.split("/models/")[1].split(":")[0];
-      console.log(`📡 Próba połączenia z: ${modelName}...`);
+      // Wyciągamy nazwę modelu i wersję dla logów (np. v1/gemini-pro)
+      const version = url.includes("/v1/") ? "v1 (Stable)" : "v1beta";
+      const model = url.split("/models/")[1].split(":")[0];
+      console.log(`📡 Próba: ${model} na ${version}...`);
       
       const response = await fetch(url, {
         method: "POST",
@@ -60,9 +59,8 @@ async function callGemini(prompt: string, imageBase64?: string) {
       });
 
       if (!response.ok) {
-        // Jeśli 429 (za dużo zapytań) lub 404 (nie znaleziono), idziemy dalej
-        const errText = await response.text();
-        console.warn(`⚠️ Błąd modelu ${modelName}: ${response.status}`, errText);
+        // Jeśli 404, lecimy dalej bez rzucania błędu do aplikacji (silent fail in loop)
+        console.warn(`⚠️ Nieudane połączenie z ${model}: ${response.status}`);
         continue; 
       }
 
@@ -71,15 +69,15 @@ async function callGemini(prompt: string, imageBase64?: string) {
       
       if (!text) throw new Error("Pusta treść");
 
-      console.log(`✅ SUKCES! Połączono z: ${modelName}`);
+      console.log(`✅ SUKCES! Połączono z: ${model} (${version})`);
       return safeParse(text);
 
     } catch (e) {
-      continue; // Próbuj następnego
+      continue; // Próbuj następnego adresu z listy
     }
   }
 
-  throw new Error("Wszystkie serwery Google zajęte lub niedostępne. Spróbuj za chwilę.");
+  throw new Error("Wszystkie serwery Google są niedostępne dla tego klucza. Sprawdź status usługi.");
 }
 
 // --- EKSPOATOWANE FUNKCJE ---
