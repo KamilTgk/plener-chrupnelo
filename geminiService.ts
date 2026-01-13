@@ -1,14 +1,12 @@
-// Twój STARY, ORYGINALNY klucz:
-const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
+// TU WKLEJ TEN NOWY KLUCZ Z AI STUDIO (utworzony przed chwilą):
+const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ"; 
 
-// Sprawdzamy 3 pancerne adresy:
+// Używamy modelu "gemini-1.5-flash" na stabilnym łączu v1beta.
+// To jest domyślny model dla nowych kluczy z AI Studio.
 const ENDPOINTS = [
-  // 1. Wersja Stabilna v1 (Najpewniejsza)
-  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
-  // 2. Wersja Beta Flash (Szybka)
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-  // 3. Wersja Stabilna Flash
-  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -43,9 +41,8 @@ async function callGemini(prompt: string, imageBase64?: string) {
   // PĘTLA RATUNKOWA
   for (const url of ENDPOINTS) {
     try {
-      const isStable = url.includes("/v1/");
       const modelName = url.split("/models/")[1].split(":")[0];
-      console.log(`📡 Próba połączenia: ${modelName} (${isStable ? 'STABLE' : 'BETA'})...`);
+      console.log(`📡 Próba połączenia z nowym kluczem: ${modelName}...`);
       
       const response = await fetch(url, {
         method: "POST",
@@ -63,7 +60,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
       
       if (!text) throw new Error("Pusta treść");
 
-      console.log(`✅ SUKCES! Połączono z: ${modelName}`);
+      console.log(`✅ SUKCES!`);
       return safeParse(text);
 
     } catch (e) {
@@ -71,10 +68,10 @@ async function callGemini(prompt: string, imageBase64?: string) {
     }
   }
 
-  throw new Error("BŁĄD: Upewnij się, że w Google Cloud zaznaczyłeś 'Nie ograniczaj klucza'!");
+  throw new Error("BŁĄD: Nowy klucz też nie działa? Sprawdź czy skopiowałeś go w całości.");
 }
 
-// --- FUNKCJE APLIKACJI ---
+// --- EKSPOATOWANE FUNKCJE ---
 
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
