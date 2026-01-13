@@ -1,16 +1,14 @@
+// Twój STARY klucz (ten oryginalny z projektu):
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
 
-// LISTA PANCERNA: Mieszamy wersje Beta i Stabilne (v1).
-// Jeśli Beta (testowa) nie działa, v1 (oficjalna) MUSI zadziałać.
+// LISTA ADRESÓW (Mieszanka wersji beta i stabilnej v1)
 const ENDPOINTS = [
-  // 1. Flash na wersji STABILNEJ (v1) - to powinno rozwiązać problem 404
-  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-  
-  // 2. Flash na wersji Beta (jako zapas)
+  // 1. Wersja Stabilna v1 (Najpewniejsza dla modelu Pro)
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
+  // 2. Wersja Beta dla Flasha (Najszybsza)
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-  
-  // 3. Klasyczny Gemini Pro na wersji STABILNEJ (v1) - najbardziej niezawodny
-  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`
+  // 3. Wersja Stabilna v1 dla Flasha
+  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -26,14 +24,12 @@ const safeParse = (text: string | undefined) => {
 };
 
 async function callGemini(prompt: string, imageBase64?: string) {
-  // Budujemy ciało zapytania
   const requestBody: any = {
     contents: [{
       parts: [{ text: prompt }]
     }]
   };
 
-  // Jeśli jest zdjęcie, dodajemy je
   if (imageBase64) {
     const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
     requestBody.contents[0].parts.push({
@@ -44,13 +40,12 @@ async function callGemini(prompt: string, imageBase64?: string) {
     });
   }
 
-  // PĘTLA PO ADRESACH
+  // PĘTLA RATUNKOWA
   for (const url of ENDPOINTS) {
     try {
-      // Wyciągamy nazwę modelu i wersję dla logów (np. v1/gemini-pro)
-      const version = url.includes("/v1/") ? "v1 (Stable)" : "v1beta";
-      const model = url.split("/models/")[1].split(":")[0];
-      console.log(`📡 Próba: ${model} na ${version}...`);
+      const isStable = url.includes("/v1/");
+      const modelName = url.split("/models/")[1].split(":")[0];
+      console.log(`📡 Próba połączenia: ${modelName} (${isStable ? 'STABLE' : 'BETA'})...`);
       
       const response = await fetch(url, {
         method: "POST",
@@ -59,9 +54,8 @@ async function callGemini(prompt: string, imageBase64?: string) {
       });
 
       if (!response.ok) {
-        // Jeśli 404, lecimy dalej bez rzucania błędu do aplikacji (silent fail in loop)
-        console.warn(`⚠️ Nieudane połączenie z ${model}: ${response.status}`);
-        continue; 
+        console.warn(`⚠️ Błąd ${response.status} dla ${modelName}`);
+        continue; // Idziemy do następnego adresu
       }
 
       const data = await response.json();
@@ -69,15 +63,15 @@ async function callGemini(prompt: string, imageBase64?: string) {
       
       if (!text) throw new Error("Pusta treść");
 
-      console.log(`✅ SUKCES! Połączono z: ${model} (${version})`);
+      console.log(`✅ SUKCES! Połączono z: ${modelName}`);
       return safeParse(text);
 
     } catch (e) {
-      continue; // Próbuj następnego adresu z listy
+      continue;
     }
   }
 
-  throw new Error("Wszystkie serwery Google są niedostępne dla tego klucza. Sprawdź status usługi.");
+  throw new Error("BŁĄD: Wejdź w Google Cloud i zaznacz 'Nie ograniczaj klucza'!");
 }
 
 // --- EKSPOATOWANE FUNKCJE ---
