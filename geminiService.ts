@@ -1,84 +1,79 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 const API_KEY = "AIzaSyC52O9u82wbIpYD1j3yYxNt1R0Yx0Wva4c";
-const genAI = new GoogleGenerativeAI(API_KEY);
 
-// LISTA MODELI (Priorytety)
-// System spróbuje pierwszego. Jak dostanie 404, spróbuje kolejnego.
-const MODELS_TO_TRY = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro", "gemini-1.0-pro"];
-
-const safeParse = (text: string | undefined) => {
-  if (!text) throw new Error("Pusta odpowiedź od AI.");
-  try {
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
-  } catch (e) {
-    console.error("Błąd parsowania:", text);
-    throw new Error("AI zwróciło błąd formatowania.");
-  }
-};
-
-// --- PANCERNA FUNKCJA WYWOŁANIA AI ---
-// Iteruje po modelach, aż któryś zadziała
-async function runWithFallback(prompt: string, imageBase64?: string) {
-  for (const modelName of MODELS_TO_TRY) {
-    try {
-      console.log(`Próba połączenia z modelem: ${modelName}...`);
-      const model = genAI.getGenerativeModel({ model: modelName });
-      
-      let result;
-      if (imageBase64) {
-        result = await model.generateContent([
-          prompt,
-          { inlineData: { data: imageBase64, mimeType: "image/png" } }
-        ]);
-      } else {
-        result = await model.generateContent(prompt);
+// Funkcja pomocnicza do bezpośredniego łączenia z Google (omijamy bibliotekę)
+async function callGemini(prompt: string, imageBase64?: string) {
+  // Używamy endpointu REST, który jest zawsze aktualny
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+  
+  const parts: any[] = [{ text: prompt }];
+  
+  if (imageBase64) {
+    // Google wymaga czystego base64 bez nagłówka data:image/...
+    const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
+    parts.push({
+      inlineData: {
+        mimeType: "image/png",
+        data: cleanBase64
       }
-      
-      // Jeśli sukces, zwracamy wynik i kończymy pętlę
-      console.log(`Sukces z modelem: ${modelName}`);
-      return safeParse(result.response.text());
-      
-    } catch (e: any) {
-      console.warn(`Błąd modelu ${modelName}:`, e.message);
-      // Jeśli to nie jest błąd 404 (nieznany model), to może być coś innego, ale próbujemy dalej
-      continue;
-    }
+    });
   }
-  throw new Error("Wszystkie modele AI są niedostępne. Sprawdź klucz API.");
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      contents: [{ parts: parts }],
+      generationConfig: {
+        responseMimeType: "application/json" // Wymuszamy JSON od razu u źródła
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.error("Błąd API:", errorData);
+    throw new Error(`Błąd połączenia z AI (${response.status}). Spróbuj ponownie.`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!text) throw new Error("AI zwróciło pustą odpowiedź.");
+  
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("Błąd JSON:", text);
+    throw new Error("AI zwróciło uszkodzone dane.");
+  }
 }
 
-// --- MAGAZYN ---
+// --- EKSPOATOWANE FUNKCJE (Interfejs dla App.tsx pozostaje ten sam) ---
+
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
   const prompt = `Jesteś szefem kuchni. Mam w lodówce: ${stock}. 
-  Stwórz z nich JEDEN przepis. Zwróć WYŁĄCZNIE czysty JSON: 
+  Stwórz JEDEN przepis. Zwróć JSON: 
   { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
   
-  return await runWithFallback(prompt);
+  return await callGemini(prompt);
 };
 
-// --- SKANER ---
 export const analyzeMealScan = async (image: string, foodName: string, weight: string) => {
   const prompt = `Analiza posiłku: ${foodName || "Danie"}, Waga: ${weight || "Standard"}. 
   Podaj makro w JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
-
-  let imgData = undefined;
-  if (image && image.includes("base64")) {
-    imgData = image.split(',')[1];
-  }
   
-  return await runWithFallback(prompt, imgData);
+  return await callGemini(prompt, image);
 };
 
-// --- PLAN ---
 export const generateMealPlan = async (config: any) => {
   const goalText = config.goalMode === 'cut' ? 'Redukcja' : 'Masa';
-  const prompt = `Plan na 1 dzień: ${config.targetCalories} kcal. Cel: ${goalText}. Kuchnia: ${config.cuisine}. Posiłków: ${config.mealCount}.
+  const prompt = `Stwórz plan na 1 dzień: ${config.targetCalories} kcal. Cel: ${goalText}. Kuchnia: ${config.cuisine}. Posiłków: ${config.mealCount}.
   Zwróć JSON: { "totalKcal": 0, "meals": [{ "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }] }`;
 
-  const data = await runWithFallback(prompt);
+  const data = await callGemini(prompt);
+  // Dodajemy pole completed dla logiki aplikacji
   return { ...data, meals: data.meals.map((m: any) => ({ ...m, completed: false })) };
 };
