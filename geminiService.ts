@@ -1,12 +1,17 @@
 import { RECIPES_DB, Recipe, CategoryType } from './recipesDatabase';
 
-// --- SEKCJA AI (Tylko dla Skanera i Lodówki) ---
+// --- KLUCZ API ---
 const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
+// --- LISTA MODELI AI (Zaktualizowana pod Polskę) ---
+// Usunąłem modele, które dawały błąd 404. Zostawiłem te najstabilniejsze.
 const ENDPOINTS = [
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp-1219:generateContent?key=${API_KEY}`,
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`
+  // 1. Flash 2.0 (Najmądrzejszy, ale często zajęty)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
+  // 2. Flash 1.5 w wersji "002" (Często działa lepiej niż zwykły)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${API_KEY}`,
+  // 3. Wersja starsza, ale stabilna
+  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -21,62 +26,124 @@ const safeParse = (text: string | undefined) => {
   }
 };
 
+// Funkcja czekania (Retry strategy)
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function callGemini(prompt: string, imageBase64?: string) {
   const requestBody: any = { contents: [{ parts: [{ text: prompt }] }] };
+  
   if (imageBase64) {
     const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
     requestBody.contents[0].parts.push({ inlineData: { mimeType: "image/png", data: cleanBase64 } });
   }
 
+  // Próbujemy każdego modelu po kolei
   for (const url of ENDPOINTS) {
     const modelName = url.split("/models/")[1].split(":")[0];
+    
+    // 2 próby na każdy model
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        console.log(`📡 [AI] Próba połączenia: ${modelName}...`);
-        const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestBody) });
+        console.log(`📡 [AI] Łączenie z: ${modelName} (Próba ${attempt})...`);
+        const response = await fetch(url, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify(requestBody) 
+        });
         
+        // Jeśli serwer zajęty (429), czekamy chwilę
         if (response.status === 429) {
-          await wait(2000); continue;
+          console.warn(`⏳ Model ${modelName} zajęty. Czekam 2 sekundy...`);
+          await wait(2000); 
+          continue;
         }
+
+        // Jeśli model niedostępny (404), przerywamy pętlę dla tego modelu
+        if (response.status === 404) {
+            console.warn(`❌ Model ${modelName} niedostępny.`);
+            break; 
+        }
+
         if (!response.ok) break;
 
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!text) throw new Error("Pusta odpowiedź");
+        
         return safeParse(text);
-      } catch (e) { continue; }
+
+      } catch (e) { 
+          console.warn("Błąd połączenia:", e);
+          continue; 
+      }
     }
   }
-  throw new Error("Serwery AI zajęte.");
+  throw new Error("Wszystkie serwery AI są obecnie przeciążone. Spróbuj później.");
 }
 
 // --- FUNKCJE EKSPORTOWANE ---
 
+// 1. Z LODÓWKI (HYBRYDA: AI -> FALLBACK DO BAZY LOKALNEJ)
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
-  const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
-  const prompt = `Jesteś kucharzem. Mam: ${stock}. Stwórz 1 przepis. Zwróć sam czysty JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
-  return await callGemini(prompt);
+  const stockNames = items.map(i => i.name.toLowerCase());
+  const stockString = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
+  
+  try {
+    // Krok 1: Próbujemy AI (jest bardziej kreatywne)
+    console.log("🧊 Próba generowania z Lodówki przez AI...");
+    const prompt = `Jesteś kucharzem. Mam: ${stockString}. Stwórz 1 kreatywny przepis wykorzystujący te składniki. Zwróć JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
+    return await callGemini(prompt);
+
+  } catch (error) {
+    // Krok 2: Jeśli AI padnie (błędy 429/404), szukamy w bazie lokalnej
+    console.warn("⚠️ AI niedostępne. Przeszukuję bazę lokalną...", error);
+    
+    // Szukamy przepisu, który zawiera chociaż jeden składnik z lodówki w swojej nazwie lub składnikach
+    const foundLocal = RECIPES_DB.find(recipe => 
+        stockNames.some(stockItem => 
+            recipe.name.toLowerCase().includes(stockItem) || 
+            recipe.ingredients.some(ing => ing.toLowerCase().includes(stockItem))
+        )
+    );
+
+    if (foundLocal) {
+        console.log("✅ Znaleziono pasujący przepis w bazie lokalnej!");
+        return {
+            ...foundLocal,
+            name: `${foundLocal.name} (z Twoich zapasów)` // Oznaczenie dla użytkownika
+        };
+    }
+
+    // Ostateczność: Losowy przepis z bazy
+    console.log("🎲 Brak pasujących. Losuję propozycję.");
+    return RECIPES_DB[Math.floor(Math.random() * RECIPES_DB.length)];
+  }
 };
 
+// 2. ZE SKANU (Tylko AI - tu nie ma fallbacku, bo musimy widzieć zdjęcie)
 export const analyzeMealScan = async (image: string, foodName: string, weight: string) => {
-  const prompt = `Oszacuj makro dla: ${foodName || "Danie"}, Waga: ${weight || "Standard"}. Zwróć sam czysty JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
+  const prompt = `Oszacuj makro dla dania ze zdjęcia. Nazwa: ${foodName || "Rozpoznaj"}, Waga: ${weight || "Standardowa porcja"}. Zwróć JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
   return await callGemini(prompt, image);
 };
 
+// 3. GENERATOR PLANU (PEŁNY OFFLINE - SZYBKI I NIEZAWODNY)
 export const generateMealPlan = async (config: any) => {
   console.log(`🚀 Pobieranie planu z Bazy Lokalnej. Preferowana kuchnia: ${config.cuisine}`);
   
   const getRandomRecipe = (category: CategoryType, preferredCuisine: string): Recipe => {
+    // Szukamy w wybranej kuchni
     let filtered = RECIPES_DB.filter(r => 
       r.category === category && 
       (r.cuisine.toLowerCase().includes(preferredCuisine.toLowerCase()) || preferredCuisine === 'Standard')
     );
 
+    // Fallback: Jeśli pusto, szukamy w całej kategorii
     if (filtered.length === 0) {
         filtered = RECIPES_DB.filter(r => r.category === category);
     }
-    // Zabezpieczenie przed pustą bazą
+    
+    // Fallback ostateczny: Losowy z bazy
     if (filtered.length === 0) return RECIPES_DB[0];
 
     const randomIndex = Math.floor(Math.random() * filtered.length);
@@ -113,30 +180,26 @@ export const generateMealPlan = async (config: any) => {
   };
 };
 
-// --- NOWA FUNKCJA: WYMIANA POSIŁKU (KOSTKA) ---
+// 4. WYMIANA POSIŁKU (OFFLINE)
 export const swapMealItem = async (category: CategoryType, currentName: string, cuisine: string = 'Standard') => {
   console.log(`🎲 Losowanie nowego posiłku: ${category} (Kuchnia: ${cuisine})`);
 
-  // 1. Szukamy kandydatów (ta sama kategoria, inna nazwa niż teraz)
   let candidates = RECIPES_DB.filter(r => 
     r.category === category && 
     r.name !== currentName &&
     (r.cuisine.toLowerCase().includes(cuisine.toLowerCase()) || cuisine === 'Standard')
   );
 
-  // 2. Fallback: Jeśli w danej kuchni nie ma innych opcji, szukamy w całej kategorii
   if (candidates.length === 0) {
     candidates = RECIPES_DB.filter(r => r.category === category && r.name !== currentName);
   }
 
-  // 3. Jeśli nadal pusto (bo np. mamy tylko 1 przepis w bazie), zwracamy ten sam
   if (candidates.length === 0) {
     console.warn("Brak alternatyw w bazie!");
-    return RECIPES_DB.find(r => r.name === currentName);
+    return null;
   }
 
-  // 4. Losujemy
   const randomIndex = Math.floor(Math.random() * candidates.length);
-  await wait(200); // Mały delay dla efektu UI
+  await wait(200);
   return candidates[randomIndex];
 };
