@@ -1,19 +1,21 @@
-// Twój klucz API
 const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
-// POPRAWIONE NAZWY MODELI
+// AKTUALNE MODELE GEMINI (styczeń 2025) - dla planu PRO
 const ENDPOINTS = [
-  // 1. Model 2.0 Flash Experimental (ten działa, ale jest zajęty)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
+  // 1. GEMINI 3 FLASH (Najnowszy! Grudzień 2025)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`,
   
-  // 2. Model 1.5 Pro (stabilny, często dostępny)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`,
+  // 2. GEMINI 2.5 FLASH (Stabilny, szybki)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
   
-  // 3. Model 1.5 Flash (wersja bez ":generateContent" w nazwie)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`,
+  // 3. GEMINI 2.5 PRO (Najbardziej zaawansowany)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${API_KEY}`,
   
-  // 4. Podstawowy model Pro
-  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`
+  // 4. GEMINI 2.0 FLASH (Stabilny)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
+  
+  // 5. GEMINI 2.0 FLASH EXP (Eksperymentalny - ten co u Ciebie działa)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -35,7 +37,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
     }],
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 2048
+      maxOutputTokens: 8192
     }
   };
 
@@ -49,7 +51,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
     });
   }
 
-  // PĘTLA RATUNKOWA
+  // PĘTLA PRZEZ MODELE
   for (const url of ENDPOINTS) {
     try {
       const modelName = url.split("/models/")[1].split(":")[0];
@@ -61,7 +63,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
         body: JSON.stringify(requestBody)
       });
 
-      // Jeśli 429 (Zajęty) -> Próbuj następnego
+      // Jeśli 429 -> próbuj następnego
       if (response.status === 429) {
          console.warn(`⚠️ Model ${modelName} jest przeciążony (429). Próbuję następnego...`);
          continue;
