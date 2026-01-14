@@ -1,12 +1,14 @@
-// Twój działający klucz (potwierdzony przez błąd 429):
+// Twój działający klucz:
 const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
-// Używamy TYLKO tego modelu, który "odpowiedział" (nawet błędem 429).
-// Inne modele (3.0, 2.5) powodują błędy krytyczne, więc je usunąłem.
+// LISTA KASKADOWA:
+// 1. Najnowszy (2.0) - Szybki, ale często zajęty (429)
+// 2. Standardowy Flash (1.5) - Wersja stabilna V1 (największa szansa na sukces)
+// 3. Stary Pro (1.0) - "Czołg", powolny, ale niezawodny
 const ENDPOINTS = [
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
-  // Jako absolutny zapas dodaję Flasha 1.5 w wersji eksperymentalnej 8b (czasami działa w PL)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`
+  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -17,11 +19,10 @@ const safeParse = (text: string | undefined) => {
     return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
   } catch (e) {
     console.error("Błąd parsowania:", text);
-    throw new Error("Błąd formatowania danych JSON.");
+    throw new Error("AI zwróciło błąd formatowania danych.");
   }
 };
 
-// Funkcja "Wait" - czekanie przed ponowną próbą
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function callGemini(prompt: string, imageBase64?: string) {
@@ -41,50 +42,44 @@ async function callGemini(prompt: string, imageBase64?: string) {
     });
   }
 
-  // Strategia: "Do trzech razy sztuka"
-  // Próbujemy połączyć się z modelem 2.0. Jak zajęty -> czekamy i znowu.
+  // PĘTLA PO MODELACH
   for (const url of ENDPOINTS) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const modelName = url.split("/models/")[1].split(":")[0];
-        console.log(`📡 Próba ${attempt}/3: ${modelName}...`);
-        
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody)
-        });
+    try {
+      const modelName = url.split("/models/")[1].split(":")[0];
+      const version = url.includes("/v1/") ? "Stable" : "Beta";
+      console.log(`📡 Próba połączenia: ${modelName} (${version})...`);
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      });
 
-        // 429 = Serwer zapchany. Czekamy dłużej (3 sekundy) i ponawiamy.
-        if (response.status === 429) {
-          console.warn(`⏳ Serwer przeciążony. Czekam 3 sekundy...`);
-          await wait(3000); 
-          continue; 
-        }
-
-        // 403/404 = Model niedostępny/nieistniejący. Przerywamy pętlę dla tego adresu.
-        if (!response.ok) {
-           console.warn(`❌ Błąd modelu ${modelName}: ${response.status}`);
-           break; 
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (!text) throw new Error("Pusta treść");
-
-        console.log(`✅ SUKCES!`);
-        return safeParse(text);
-
-      } catch (e) {
-        console.warn("Błąd połączenia:", e);
-        await wait(1000);
-        continue;
+      // Jeśli 429 (Zajęty) -> Nie czekamy 3 sekundy, tylko od razu idziemy do innego modelu!
+      if (response.status === 429) {
+        console.warn(`⚠️ Model ${modelName} jest zajęty (429). Przełączam na inny...`);
+        continue; 
       }
+
+      if (!response.ok) {
+         console.warn(`⚠️ Model ${modelName} niedostępny (Status: ${response.status})`);
+         continue; 
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (!text) throw new Error("Pusta treść");
+
+      console.log(`✅ SUKCES! Odebrano dane z: ${modelName}`);
+      return safeParse(text);
+
+    } catch (e) {
+      continue;
     }
   }
 
-  throw new Error("Serwery Google są teraz bardzo obciążone (Błąd 429). Spróbuj za minutę.");
+  throw new Error("Wszystkie modele zajęte. Spróbuj za minutę.");
 }
 
 // --- EKSPOATOWANE FUNKCJE ---
