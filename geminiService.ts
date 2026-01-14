@@ -51,41 +51,33 @@ async function callGemini(prompt: string, imageBase64?: string) {
   throw new Error("Serwery AI zajęte.");
 }
 
-// --- FUNKCJE HYBRYDOWE ---
+// --- FUNKCJE EKSPORTOWANE ---
 
-// 1. Z LODÓWKI (Używa AI - tu kuchnia nie ma znaczenia, liczą się składniki)
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
   const prompt = `Jesteś kucharzem. Mam: ${stock}. Stwórz 1 przepis. Zwróć sam czysty JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
   return await callGemini(prompt);
 };
 
-// 2. ZE SKANU (Używa AI - rozpoznaje to co widzi)
 export const analyzeMealScan = async (image: string, foodName: string, weight: string) => {
   const prompt = `Oszacuj makro dla: ${foodName || "Danie"}, Waga: ${weight || "Standard"}. Zwróć sam czysty JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
   return await callGemini(prompt, image);
 };
 
-// 3. GENERATOR PLANU (UŻYWA LOKALNEJ BAZY 8000 PRZEPISÓW + FILTR KUCHNII)
 export const generateMealPlan = async (config: any) => {
   console.log(`🚀 Pobieranie planu z Bazy Lokalnej. Preferowana kuchnia: ${config.cuisine}`);
   
-  // Funkcja losująca z uwzględnieniem preferencji
   const getRandomRecipe = (category: CategoryType, preferredCuisine: string): Recipe => {
-    
-    // Krok 1: Szukamy przepisu, który pasuje do kategorii ORAZ wybranej kuchni
-    // Np. Obiad + Włoska
     let filtered = RECIPES_DB.filter(r => 
       r.category === category && 
       (r.cuisine.toLowerCase().includes(preferredCuisine.toLowerCase()) || preferredCuisine === 'Standard')
     );
 
-    // Krok 2: Jeśli nie ma nic w wybranej kuchni (np. brak Japońskiego śniadania),
-    // bierzemy cokolwiek z danej kategorii (Fallback), żeby nie zwrócić błędu.
     if (filtered.length === 0) {
-        console.warn(`Brak przepisu ${preferredCuisine} dla ${category}. Biorę losowy.`);
         filtered = RECIPES_DB.filter(r => r.category === category);
     }
+    // Zabezpieczenie przed pustą bazą
+    if (filtered.length === 0) return RECIPES_DB[0];
 
     const randomIndex = Math.floor(Math.random() * filtered.length);
     return filtered[randomIndex];
@@ -93,9 +85,8 @@ export const generateMealPlan = async (config: any) => {
 
   let meals: Recipe[] = [];
   const count = parseInt(config.mealCount) || 3;
-  const cuisine = config.cuisine || 'Standard'; // Pobieramy kuchnię z konfiguracji użytkownika
+  const cuisine = config.cuisine || 'Standard'; 
 
-  // Generowanie posiłków
   if (count === 3) {
     meals.push(getRandomRecipe('sniadanie', cuisine));
     meals.push(getRandomRecipe('obiad', cuisine));
@@ -113,14 +104,39 @@ export const generateMealPlan = async (config: any) => {
     meals.push(getRandomRecipe('kolacja', cuisine));
   }
 
-  // Obliczamy sumy
   const totalKcal = meals.reduce((sum, m) => sum + m.kcal, 0);
-
-  // Symulujemy małe opóźnienie dla UX
   await wait(300);
 
   return {
     totalKcal,
     meals: meals.map(m => ({ ...m, completed: false }))
   };
+};
+
+// --- NOWA FUNKCJA: WYMIANA POSIŁKU (KOSTKA) ---
+export const swapMealItem = async (category: CategoryType, currentName: string, cuisine: string = 'Standard') => {
+  console.log(`🎲 Losowanie nowego posiłku: ${category} (Kuchnia: ${cuisine})`);
+
+  // 1. Szukamy kandydatów (ta sama kategoria, inna nazwa niż teraz)
+  let candidates = RECIPES_DB.filter(r => 
+    r.category === category && 
+    r.name !== currentName &&
+    (r.cuisine.toLowerCase().includes(cuisine.toLowerCase()) || cuisine === 'Standard')
+  );
+
+  // 2. Fallback: Jeśli w danej kuchni nie ma innych opcji, szukamy w całej kategorii
+  if (candidates.length === 0) {
+    candidates = RECIPES_DB.filter(r => r.category === category && r.name !== currentName);
+  }
+
+  // 3. Jeśli nadal pusto (bo np. mamy tylko 1 przepis w bazie), zwracamy ten sam
+  if (candidates.length === 0) {
+    console.warn("Brak alternatyw w bazie!");
+    return RECIPES_DB.find(r => r.name === currentName);
+  }
+
+  // 4. Losujemy
+  const randomIndex = Math.floor(Math.random() * candidates.length);
+  await wait(200); // Mały delay dla efektu UI
+  return candidates[randomIndex];
 };
