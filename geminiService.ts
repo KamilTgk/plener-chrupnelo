@@ -1,16 +1,19 @@
-// Twój NOWY klucz (zostawiamy go, jest dobry):
+// Twój klucz API
 const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
-// LISTA ADRESÓW - Przywracamy ten, który odpowiedział (nawet błędem 429)
+// POPRAWIONE NAZWY MODELI
 const ENDPOINTS = [
-  // 1. Model Eksperymentalny 2.0 (Ten, który dał znak życia wcześniej!)
+  // 1. Model 2.0 Flash Experimental (ten działa, ale jest zajęty)
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
   
-  // 2. Standardowy Flash (Beta)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+  // 2. Model 1.5 Pro (stabilny, często dostępny)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`,
   
-  // 3. Wersja "Latest" (Czasami działa lepiej w UE)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`
+  // 3. Model 1.5 Flash (wersja bez ":generateContent" w nazwie)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`,
+  
+  // 4. Podstawowy model Pro
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -29,7 +32,11 @@ async function callGemini(prompt: string, imageBase64?: string) {
   const requestBody: any = {
     contents: [{
       parts: [{ text: prompt }]
-    }]
+    }],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2048
+    }
   };
 
   if (imageBase64) {
@@ -54,15 +61,15 @@ async function callGemini(prompt: string, imageBase64?: string) {
         body: JSON.stringify(requestBody)
       });
 
-      // Jeśli 429 (Zajęty) -> To dobry znak! Oznacza, że klucz działa.
-      // Ale musimy spróbować innego lub poczekać.
+      // Jeśli 429 (Zajęty) -> Próbuj następnego
       if (response.status === 429) {
          console.warn(`⚠️ Model ${modelName} jest przeciążony (429). Próbuję następnego...`);
          continue;
       }
 
       if (!response.ok) {
-        console.warn(`⚠️ Model ${modelName} niedostępny (Status: ${response.status})`);
+        const errorData = await response.json().catch(() => null);
+        console.warn(`⚠️ Model ${modelName} niedostępny (Status: ${response.status})`, errorData);
         continue; 
       }
 
@@ -75,14 +82,15 @@ async function callGemini(prompt: string, imageBase64?: string) {
       return safeParse(text);
 
     } catch (e) {
+      console.error(`❌ Błąd dla modelu:`, e);
       continue;
     }
   }
 
-  throw new Error("Serwery Google są przeciążone (429) lub niedostępne. Odczekaj minutę i spróbuj ponownie.");
+  throw new Error("Wszystkie modele Gemini są niedostępne. Spróbuj ponownie za chwilę.");
 }
 
-// --- EKSPOATOWANE FUNKCJE ---
+// --- EKSPORTOWANE FUNKCJE ---
 
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
