@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-// DODANO: swapMealItem do importów
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserSessionPersistence } from "firebase/auth";
 import { generateMealPlan, analyzeMealScan, generateRecipeFromInventory, swapMealItem } from './geminiService';
 import { DayPlan, BioProfile } from './types';
-// Import bazy typów potrzebny do rzutowania kategorii (opcjonalnie, jeśli TS krzyczy)
 import { CategoryType } from './recipesDatabase';
 
 // --- KONFIGURACJA FIREBASE ---
@@ -79,7 +77,7 @@ export default function App() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // --- KONFIGURACJA AI ---
-  // ZMIANA: Losujemy kuchnię na starcie
+  // Losujemy kuchnię przy starcie aplikacji
   const [cuisine, setCuisine] = useState(WORLD_CUISINES[Math.floor(Math.random() * WORLD_CUISINES.length)]);
   const [exclusions, setExclusions] = useState("");
   const [mealCount, setMealCount] = useState(4);
@@ -97,13 +95,16 @@ export default function App() {
   const [water, setWater] = useState({ current: 0, target: 2500 });
   const [steps, setSteps] = useState({ current: 0, target: 10000 });
 
-  // --- LOGOWANIE (WYMUSZONE) ---
+  // --- LOGOWANIE Z PERSYSTENCJĄ SESJI ---
+  // To sprawia, że F5 nie wylogowuje, ale zamknięcie karty - tak.
   useEffect(() => {
-    // ZMIANA: Najpierw wyloguj przy każdym odświeżeniu
-    signOut(auth).then(() => {
-        // Dopiero potem nasłuchuj (ale użytkownik i tak będzie wylogowany na starcie)
+    setPersistence(auth, browserSessionPersistence)
+      .then(() => {
         return onAuthStateChanged(auth, (u) => setUser(u || null));
-    });
+      })
+      .catch((error) => {
+        console.error("Auth Error:", error);
+      });
   }, []);
 
   const handleAuth = () => {
@@ -112,7 +113,7 @@ export default function App() {
       .catch((e) => alert("Błąd logowania: " + e.code));
   };
 
-  // --- PERSYSTENCJA (Bez zmian) ---
+  // --- PERSYSTENCJA DANYCH ---
   useEffect(() => {
     const d = { 
       p: localStorage.getItem('pl_p'), pr: localStorage.getItem('pl_pr'), 
@@ -286,7 +287,7 @@ export default function App() {
             ingredients: recipe.ingredients || [],
             instructions: recipe.instructions || [],
             imageUrl: recipe.imageUrl,
-            category: recipe.category, // Ważne: zapisujemy kategorię
+            category: recipe.category, 
             completed: false
         };
 
@@ -303,11 +304,10 @@ export default function App() {
     alert("Dodano przepis do planu!");
   };
 
-  // --- NOWY HANDLER: WYMIANA POSIŁKU (KOSTKA) ---
+  // --- HANDLER WYMIANY POSIŁKU (KOSTKA) ---
   const handleSwapMeal = async (idx: number, category: string, currentName: string) => {
       setLoading(true);
       try {
-          // Używamy aktualnie wybranej kuchni (zmiennej stanu 'cuisine')
           const newRecipe = await swapMealItem(category as CategoryType, currentName, cuisine);
           
           if (!newRecipe) {
@@ -318,11 +318,10 @@ export default function App() {
 
           setPlans(prev => {
               const currentMeals = [...(prev[selectedDate]?.meals || [])];
-              // Podmieniamy tylko ten jeden posiłek
               currentMeals[idx] = {
                   ...newRecipe,
-                  completed: false, // Resetujemy status zjedzenia
-                  category: newRecipe.category // Upewniamy się, że kategoria jest
+                  completed: false,
+                  category: newRecipe.category 
               };
               return { ...prev, [selectedDate]: { ...prev[selectedDate], meals: currentMeals } };
           });
@@ -479,7 +478,7 @@ export default function App() {
                     <div className="space-y-4">
                     {currentPlan.meals.map((meal: any, idx: number) => (
                         <div key={idx} className="relative group/wrapper">
-                            {/* PRZYCISK WYMIANY - POJAWIA SIĘ PO LEWEJ STRONIE */}
+                            {/* PRZYCISK WYMIANY (DICE) */}
                             {!meal.completed && (
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); handleSwapMeal(idx, meal.category, meal.name); }}
