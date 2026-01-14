@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { generateMealPlan, analyzeMealScan, generateRecipeFromInventory } from './geminiService';
+// DODANO: swapMealItem do importów
+import { generateMealPlan, analyzeMealScan, generateRecipeFromInventory, swapMealItem } from './geminiService';
 import { DayPlan, BioProfile } from './types';
+// Import bazy typów potrzebny do rzutowania kategorii (opcjonalnie, jeśli TS krzyczy)
+import { CategoryType } from './recipesDatabase';
 
 // --- KONFIGURACJA FIREBASE ---
 const firebaseConfig = {
@@ -66,7 +69,7 @@ export default function App() {
   const [newItem, setNewItem] = useState({ name: '', weight: '' });
   const [savedRecipes, setSavedRecipes] = useState<any[]>([]);
   const [inventoryFilter, setInventoryFilter] = useState("Wszystkie");
-  
+   
   const [planModal, setPlanModal] = useState<{show: boolean, recipe: any | null}>({show: false, recipe: null});
 
   // --- STANY SKANERA ---
@@ -76,7 +79,8 @@ export default function App() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // --- KONFIGURACJA AI ---
-  const [cuisine, setCuisine] = useState("");
+  // ZMIANA: Losujemy kuchnię na starcie
+  const [cuisine, setCuisine] = useState(WORLD_CUISINES[Math.floor(Math.random() * WORLD_CUISINES.length)]);
   const [exclusions, setExclusions] = useState("");
   const [mealCount, setMealCount] = useState(4);
 
@@ -93,9 +97,13 @@ export default function App() {
   const [water, setWater] = useState({ current: 0, target: 2500 });
   const [steps, setSteps] = useState({ current: 0, target: 10000 });
 
-  // --- LOGOWANIE ---
+  // --- LOGOWANIE (WYMUSZONE) ---
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => setUser(u || null));
+    // ZMIANA: Najpierw wyloguj przy każdym odświeżeniu
+    signOut(auth).then(() => {
+        // Dopiero potem nasłuchuj (ale użytkownik i tak będzie wylogowany na starcie)
+        return onAuthStateChanged(auth, (u) => setUser(u || null));
+    });
   }, []);
 
   const handleAuth = () => {
@@ -104,7 +112,7 @@ export default function App() {
       .catch((e) => alert("Błąd logowania: " + e.code));
   };
 
-  // --- PERSYSTENCJA I CZYSZCZENIE ---
+  // --- PERSYSTENCJA (Bez zmian) ---
   useEffect(() => {
     const d = { 
       p: localStorage.getItem('pl_p'), pr: localStorage.getItem('pl_pr'), 
@@ -141,7 +149,6 @@ export default function App() {
     if (d.r) setSavedRecipes(JSON.parse(d.r));
   }, []);
 
-  // --- ZAPIS Z OBSŁUGĄ QUOTA EXCEEDED ---
   useEffect(() => {
     const saveData = () => {
         try {
@@ -279,6 +286,7 @@ export default function App() {
             ingredients: recipe.ingredients || [],
             instructions: recipe.instructions || [],
             imageUrl: recipe.imageUrl,
+            category: recipe.category, // Ważne: zapisujemy kategorię
             completed: false
         };
 
@@ -293,6 +301,38 @@ export default function App() {
 
     setPlanModal({show: false, recipe: null});
     alert("Dodano przepis do planu!");
+  };
+
+  // --- NOWY HANDLER: WYMIANA POSIŁKU (KOSTKA) ---
+  const handleSwapMeal = async (idx: number, category: string, currentName: string) => {
+      setLoading(true);
+      try {
+          // Używamy aktualnie wybranej kuchni (zmiennej stanu 'cuisine')
+          const newRecipe = await swapMealItem(category as CategoryType, currentName, cuisine);
+          
+          if (!newRecipe) {
+             alert("Brak innych opcji w tej kategorii!");
+             setLoading(false);
+             return;
+          }
+
+          setPlans(prev => {
+              const currentMeals = [...(prev[selectedDate]?.meals || [])];
+              // Podmieniamy tylko ten jeden posiłek
+              currentMeals[idx] = {
+                  ...newRecipe,
+                  completed: false, // Resetujemy status zjedzenia
+                  category: newRecipe.category // Upewniamy się, że kategoria jest
+              };
+              return { ...prev, [selectedDate]: { ...prev[selectedDate], meals: currentMeals } };
+          });
+
+      } catch (e) {
+          console.error(e);
+          alert("Błąd podczas wymiany posiłku.");
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleSmartScan = async () => {
@@ -438,47 +478,63 @@ export default function App() {
 
                     <div className="space-y-4">
                     {currentPlan.meals.map((meal: any, idx: number) => (
-                        <details key={idx} className={`bg-[#161618] rounded-[2.5rem] border transition-all duration-500 overflow-hidden group ${meal.completed ? 'border-emerald-500/30 opacity-70' : 'border-[#27272a]'}`}>
-                        <summary className="p-6 flex items-center justify-between cursor-pointer list-none outline-none text-left">
-                            <div className="flex items-center gap-4">
+                        <div key={idx} className="relative group/wrapper">
+                            {/* PRZYCISK WYMIANY - POJAWIA SIĘ PO LEWEJ STRONIE */}
+                            {!meal.completed && (
                                 <button 
-                                    onClick={(e) => { e.preventDefault(); toggleMealCompletion(idx); }} 
-                                    className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${meal.completed ? 'bg-emerald-500 border-emerald-500 text-black' : 'border-stone-700 text-transparent hover:border-[#ff7a00]'}`}
+                                    onClick={(e) => { e.stopPropagation(); handleSwapMeal(idx, meal.category, meal.name); }}
+                                    className="absolute -left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 bg-[#161618] border border-[#ff7a00]/30 rounded-full flex items-center justify-center text-sm shadow-xl hover:scale-110 active:scale-95 transition-all text-[#ff7a00]"
+                                    title="Wylosuj inny posiłek (ta sama kuchnia)"
                                 >
-                                    ✓
+                                    🎲
                                 </button>
-                                <div>
-                                <h4 className="text-[9px] font-black uppercase text-stone-500">Posiłek {idx + 1}</h4>
-                                <p className={`font-black italic text-lg ${meal.completed ? 'text-emerald-400 line-through decoration-2' : 'text-stone-200'}`}>{meal.name}</p>
-                                <p className="text-[8px] text-stone-600 font-bold uppercase">{meal.kcal} kcal • B:{meal.protein}g T:{meal.fat}g W:{meal.carbs}g</p>
-                                </div>
-                            </div>
-                            <span className="text-2xl group-open:rotate-180 transition-transform">🍽️</span>
-                        </summary>
-                        <div className="px-8 pb-8 space-y-4 border-t border-white/5 pt-4 text-[11px] text-stone-400 text-left">
-                            {meal.imageUrl && (
-                                <div className="w-full h-48 bg-[#0a0a0b] rounded-2xl overflow-hidden mb-4 border border-white/5 relative group/img">
-                                    <img src={meal.imageUrl} alt={meal.name} className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110" />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
-                                        <span className="text-[#ff7a00] font-black text-[10px] uppercase tracking-widest">Wizualizacja AI</span>
-                                    </div>
-                                </div>
                             )}
-                            <p className="text-[#ff7a00] font-black uppercase italic text-[10px]">Składniki:</p>
-                            <ul className="list-disc pl-4 space-y-1">
-                                {meal.ingredients?.map((ing: string, i: number) => <li key={i} className="marker:text-stone-600">{ing}</li>)}
-                            </ul>
-                            <p className="text-[#ff7a00] font-black uppercase italic text-[10px] mt-2">Instrukcja:</p>
-                            <div className="space-y-2">
-                                {meal.instructions?.map((s: string, i: number) => (
-                                    <div key={i} className="flex gap-3">
-                                        <span className="font-black text-stone-600 min-w-[1.5rem]">{i+1}.</span>
-                                        <p>{s}</p>
+                            
+                            <details className={`bg-[#161618] rounded-[2.5rem] border transition-all duration-500 overflow-hidden group ${meal.completed ? 'border-emerald-500/30 opacity-70' : 'border-[#27272a]'}`}>
+                            <summary className="p-6 flex items-center justify-between cursor-pointer list-none outline-none text-left pl-10">
+                                <div className="flex items-center gap-4">
+                                    <button 
+                                        onClick={(e) => { e.preventDefault(); toggleMealCompletion(idx); }} 
+                                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${meal.completed ? 'bg-emerald-500 border-emerald-500 text-black' : 'border-stone-700 text-transparent hover:border-[#ff7a00]'}`}
+                                    >
+                                        ✓
+                                    </button>
+                                    <div>
+                                    <h4 className="text-[9px] font-black uppercase text-stone-500 flex items-center gap-2">
+                                        Posiłek {idx + 1}
+                                        {meal.category && <span className="bg-white/5 px-1.5 py-0.5 rounded text-[7px]">{meal.category}</span>}
+                                    </h4>
+                                    <p className={`font-black italic text-lg ${meal.completed ? 'text-emerald-400 line-through decoration-2' : 'text-stone-200'}`}>{meal.name}</p>
+                                    <p className="text-[8px] text-stone-600 font-bold uppercase">{meal.kcal} kcal • B:{meal.protein}g T:{meal.fat}g W:{meal.carbs}g</p>
                                     </div>
-                                ))}
+                                </div>
+                                <span className="text-2xl group-open:rotate-180 transition-transform">🍽️</span>
+                            </summary>
+                            <div className="px-8 pb-8 space-y-4 border-t border-white/5 pt-4 text-[11px] text-stone-400 text-left">
+                                {meal.imageUrl && (
+                                    <div className="w-full h-48 bg-[#0a0a0b] rounded-2xl overflow-hidden mb-4 border border-white/5 relative group/img">
+                                        <img src={meal.imageUrl} alt={meal.name} className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
+                                            <span className="text-[#ff7a00] font-black text-[10px] uppercase tracking-widest">Wizualizacja AI</span>
+                                        </div>
+                                    </div>
+                                )}
+                                <p className="text-[#ff7a00] font-black uppercase italic text-[10px]">Składniki:</p>
+                                <ul className="list-disc pl-4 space-y-1">
+                                    {meal.ingredients?.map((ing: string, i: number) => <li key={i} className="marker:text-stone-600">{ing}</li>)}
+                                </ul>
+                                <p className="text-[#ff7a00] font-black uppercase italic text-[10px] mt-2">Instrukcja:</p>
+                                <div className="space-y-2">
+                                    {meal.instructions?.map((s: string, i: number) => (
+                                        <div key={i} className="flex gap-3">
+                                            <span className="font-black text-stone-600 min-w-[1.5rem]">{i+1}.</span>
+                                            <p>{s}</p>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
+                            </details>
                         </div>
-                        </details>
                     ))}
                     </div>
 
@@ -488,8 +544,8 @@ export default function App() {
                              <div className="grid grid-cols-2 gap-3">
                                  {shoppingList.map((item: string, i: number) => (
                                      <div key={i} className="flex items-start gap-2 text-[10px] text-stone-300">
-                                         <div className="w-3 h-3 border border-stone-600 rounded-sm mt-0.5 shrink-0" />
-                                         <span>{item}</span>
+                                          <div className="w-3 h-3 border border-stone-600 rounded-sm mt-0.5 shrink-0" />
+                                          <span>{item}</span>
                                      </div>
                                  ))}
                              </div>
