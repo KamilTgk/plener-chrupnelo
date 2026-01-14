@@ -77,7 +77,6 @@ export default function App() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // --- KONFIGURACJA AI ---
-  // Losujemy kuchnię przy starcie aplikacji
   const [cuisine, setCuisine] = useState(WORLD_CUISINES[Math.floor(Math.random() * WORLD_CUISINES.length)]);
   const [exclusions, setExclusions] = useState("");
   const [mealCount, setMealCount] = useState(4);
@@ -95,8 +94,7 @@ export default function App() {
   const [water, setWater] = useState({ current: 0, target: 2500 });
   const [steps, setSteps] = useState({ current: 0, target: 10000 });
 
-  // --- LOGOWANIE Z PERSYSTENCJĄ SESJI ---
-  // To sprawia, że F5 nie wylogowuje, ale zamknięcie karty - tak.
+  // --- LOGOWANIE Z PERSYSTENCJĄ ---
   useEffect(() => {
     setPersistence(auth, browserSessionPersistence)
       .then(() => {
@@ -504,7 +502,9 @@ export default function App() {
                                         {meal.category && <span className="bg-white/5 px-1.5 py-0.5 rounded text-[7px]">{meal.category}</span>}
                                     </h4>
                                     <p className={`font-black italic text-lg ${meal.completed ? 'text-emerald-400 line-through decoration-2' : 'text-stone-200'}`}>{meal.name}</p>
-                                    <p className="text-[8px] text-stone-600 font-bold uppercase">{meal.kcal} kcal • B:{meal.protein}g T:{meal.fat}g W:{meal.carbs}g</p>
+                                    <p className="text-[8px] text-stone-600 font-bold uppercase text-[#ff7a00]">
+                                        {meal.kcal} kcal • <span className="text-stone-500">B:{meal.protein}g T:{meal.fat}g W:{meal.carbs}g</span>
+                                    </p>
                                     </div>
                                 </div>
                                 <span className="text-2xl group-open:rotate-180 transition-transform">🍽️</span>
@@ -824,6 +824,13 @@ export default function App() {
                           <span className="text-[9px] font-black uppercase text-[#ff7a00] italic">Przepis AI</span>
                       </div>
                       <p className="font-black italic text-stone-200 text-lg leading-tight">{recipe.name}</p>
+                      {/* NOWE: Wyświetlanie makro na liście (bez rozwijania) */}
+                      <div className="flex gap-2 mt-1 text-[8px] font-black uppercase text-stone-500">
+                         <span className="text-[#ff7a00]">{recipe.kcal} kcal</span>
+                         <span>B: {recipe.protein}g</span>
+                         <span>T: {recipe.fat}g</span>
+                         <span>W: {recipe.carbs}g</span>
+                      </div>
                     </div>
                     <span className="text-2xl group-open:rotate-180 transition-transform">📖</span>
                   </summary>
@@ -875,7 +882,11 @@ export default function App() {
                   <button onClick={() => setPlanModal({show: false, recipe: null})} className="absolute top-6 right-6 text-stone-500 text-2xl">×</button>
                   <h3 className="text-xl font-black italic text-[#ff7a00] uppercase text-center">Dodaj do Planu</h3>
                   <div className="space-y-4">
-                      <p className="text-center text-xs font-bold text-stone-400 mb-4">{planModal.recipe.name}</p>
+                      <p className="text-center text-xs font-bold text-stone-200 mb-1">{planModal.recipe.name}</p>
+                      {/* NOWE: Wyświetlanie makro w oknie dodawania */}
+                      <p className="text-center text-[9px] font-black uppercase text-stone-500 mb-4">
+                           {planModal.recipe.kcal} kcal • B:{planModal.recipe.protein} T:{planModal.recipe.fat} W:{planModal.recipe.carbs}
+                      </p>
                       
                       <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => handleAddToPlan(getToday(), -1)} className="bg-[#0a0a0b] py-4 rounded-2xl border border-white/10 hover:border-[#ff7a00] text-xs font-black uppercase transition-all">
