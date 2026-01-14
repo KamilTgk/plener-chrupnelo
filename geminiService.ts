@@ -1,21 +1,12 @@
+// Twój działający klucz (potwierdzony przez błąd 429):
 const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
-// AKTUALNE MODELE GEMINI (styczeń 2025) - dla planu PRO
+// Używamy TYLKO tego modelu, który "odpowiedział" (nawet błędem 429).
+// Inne modele (3.0, 2.5) powodują błędy krytyczne, więc je usunąłem.
 const ENDPOINTS = [
-  // 1. GEMINI 3 FLASH (Najnowszy! Grudzień 2025)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`,
-  
-  // 2. GEMINI 2.5 FLASH (Stabilny, szybki)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
-  
-  // 3. GEMINI 2.5 PRO (Najbardziej zaawansowany)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${API_KEY}`,
-  
-  // 4. GEMINI 2.0 FLASH (Stabilny)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
-  
-  // 5. GEMINI 2.0 FLASH EXP (Eksperymentalny - ten co u Ciebie działa)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
+  // Jako absolutny zapas dodaję Flasha 1.5 w wersji eksperymentalnej 8b (czasami działa w PL)
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`
 ];
 
 const safeParse = (text: string | undefined) => {
@@ -26,19 +17,18 @@ const safeParse = (text: string | undefined) => {
     return JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
   } catch (e) {
     console.error("Błąd parsowania:", text);
-    throw new Error("AI zwróciło błąd formatowania.");
+    throw new Error("Błąd formatowania danych JSON.");
   }
 };
+
+// Funkcja "Wait" - czekanie przed ponowną próbą
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function callGemini(prompt: string, imageBase64?: string) {
   const requestBody: any = {
     contents: [{
       parts: [{ text: prompt }]
-    }],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 8192
-    }
+    }]
   };
 
   if (imageBase64) {
@@ -51,48 +41,53 @@ async function callGemini(prompt: string, imageBase64?: string) {
     });
   }
 
-  // PĘTLA PRZEZ MODELE
+  // Strategia: "Do trzech razy sztuka"
+  // Próbujemy połączyć się z modelem 2.0. Jak zajęty -> czekamy i znowu.
   for (const url of ENDPOINTS) {
-    try {
-      const modelName = url.split("/models/")[1].split(":")[0];
-      console.log(`📡 Próba połączenia: ${modelName}...`);
-      
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-      });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const modelName = url.split("/models/")[1].split(":")[0];
+        console.log(`📡 Próba ${attempt}/3: ${modelName}...`);
+        
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        });
 
-      // Jeśli 429 -> próbuj następnego
-      if (response.status === 429) {
-         console.warn(`⚠️ Model ${modelName} jest przeciążony (429). Próbuję następnego...`);
-         continue;
+        // 429 = Serwer zapchany. Czekamy dłużej (3 sekundy) i ponawiamy.
+        if (response.status === 429) {
+          console.warn(`⏳ Serwer przeciążony. Czekam 3 sekundy...`);
+          await wait(3000); 
+          continue; 
+        }
+
+        // 403/404 = Model niedostępny/nieistniejący. Przerywamy pętlę dla tego adresu.
+        if (!response.ok) {
+           console.warn(`❌ Błąd modelu ${modelName}: ${response.status}`);
+           break; 
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!text) throw new Error("Pusta treść");
+
+        console.log(`✅ SUKCES!`);
+        return safeParse(text);
+
+      } catch (e) {
+        console.warn("Błąd połączenia:", e);
+        await wait(1000);
+        continue;
       }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.warn(`⚠️ Model ${modelName} niedostępny (Status: ${response.status})`, errorData);
-        continue; 
-      }
-
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      if (!text) throw new Error("Pusta treść");
-
-      console.log(`✅ SUKCES! Połączono z: ${modelName}`);
-      return safeParse(text);
-
-    } catch (e) {
-      console.error(`❌ Błąd dla modelu:`, e);
-      continue;
     }
   }
 
-  throw new Error("Wszystkie modele Gemini są niedostępne. Spróbuj ponownie za chwilę.");
+  throw new Error("Serwery Google są teraz bardzo obciążone (Błąd 429). Spróbuj za minutę.");
 }
 
-// --- EKSPORTOWANE FUNKCJE ---
+// --- EKSPOATOWANE FUNKCJE ---
 
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
