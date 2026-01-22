@@ -1,17 +1,27 @@
 // src/geminiService.ts
 
-// 🛑 WAŻNE: Wklej tu NOWY klucz z Google AI Studio. Stary jest zablokowany.
-const API_KEY = "AIzaSyBKjQ4yUFcskCGrR8uWUpXKd_ufG4_Dqug"; 
+// 🛑 PAMIĘTAJ: Tu musi być Twój NOWY klucz API
+const API_KEY = "TU_WKLEJ_SWOJ_NOWY_KLUCZ_Z_GOOGLE_AI_STUDIO"; 
 
-// --- LISTA MODELI (Zaktualizowana i bezpieczna) ---
-const ENDPOINTS = [
-  // 1. Stabilny model (Podstawa w PL)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-  // 2. Wersja nowsza (Jako zapas)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`,
-  // 3. Wersja szybka
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`
+// --- LISTA MODELI (Kolejność: Od największego limitu do najmniejszego) ---
+const AVAILABLE_MODELS = [
+  // 1. "Wół roboczy" - największe limity darmowe, stabilny
+  "gemini-1.5-flash", 
+  
+  // 2. Wersja lekka - bardzo szybka, rzadko się korkuje
+  "gemini-1.5-flash-8b",
+
+  // 3. Wersja eksperymentalna - najmądrzejsza, ale małe limity (często rzuca 429)
+  "gemini-2.0-flash-exp", 
+  
+  // 4. Klasyk - jako ostateczność
+  "gemini-pro"
 ];
+
+// Budujemy pełne adresy URL
+const ENDPOINTS = AVAILABLE_MODELS.map(model => 
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`
+);
 
 const safeParse = (text: string | undefined) => {
   if (!text) throw new Error("Pusta odpowiedź od AI.");
@@ -26,12 +36,16 @@ const safeParse = (text: string | undefined) => {
   }
 };
 
+// Funkcja czekania
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function callGemini(prompt: string, imageBase64?: string) {
   const requestBody: any = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.7, maxOutputTokens: 2500 }
+    generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2500,
+    }
   };
   
   if (imageBase64) {
@@ -39,61 +53,75 @@ async function callGemini(prompt: string, imageBase64?: string) {
     requestBody.contents[0].parts.push({ inlineData: { mimeType: "image/png", data: cleanBase64 } });
   }
 
-  // Pętla po modelach
+  // Pętla po modelach (Failover)
   for (const url of ENDPOINTS) {
     const modelName = url.split("/models/")[1].split(":")[0];
+    
     try {
-      console.log(`📡 [AI] Próba: ${modelName}...`);
+      console.log(`📡 [AI] Próba połączenia: ${modelName}...`);
+      
       const response = await fetch(url, { 
           method: "POST", 
           headers: { "Content-Type": "application/json" }, 
           body: JSON.stringify(requestBody) 
       });
       
-      // Obsługa błędów
-      if (response.status === 403) {
-          throw new Error("⛔ Twój klucz API jest nieprawidłowy lub zablokowany. Wygeneruj nowy!");
+      // SCENARIUSZ: Przekroczono limit (429)
+      if (response.status === 429) {
+        console.warn(`⏳ Limit wyczerpany dla ${modelName}. Czekam 4 sekundy i zmieniam model...`);
+        await wait(4000); // Czekamy dłużej niż prosi Google (2.5s -> 4s)
+        continue; // Idź do następnego modelu z listy
       }
       
-      if (response.status === 429 || response.status === 404 || response.status >= 500) {
-         console.warn(`⚠️ Model ${modelName} niedostępny. Przełączam...`);
-         continue; 
+      // SCENARIUSZ: Inne błędy (404, 500, 503)
+      if (!response.ok) {
+          console.warn(`❌ Błąd modelu ${modelName}: ${response.status}. Przełączam...`);
+          continue; 
       }
-      
-      if (!response.ok) throw new Error(`Błąd API: ${response.status}`);
 
       const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
+      // Czasem wpada 200 OK, ale w środku jest informacja o blokadzie
+      if (data.error) {
+          throw new Error(data.error.message);
+      }
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) throw new Error("Pusta treść");
       
-      console.log(`✅ Sukces! (${modelName})`);
+      console.log(`✅ Sukces! Obsłużył: ${modelName}`);
       return safeParse(text);
 
-    } catch (e: any) {
-        // Jeśli błąd to zablokowany klucz - przerywamy wszystko natychmiast
-        if (e.message.includes("zablokowany")) throw e;
-        
-        console.warn(`Błąd modelu ${modelName}:`, e);
-        await wait(500); 
+    } catch (e: any) { 
+        console.warn(`Błąd połączenia z ${modelName}:`, e);
+        // Jeśli klucz zablokowany - koniec gry
+        if (e.message && (e.message.includes("API key") || e.message.includes("403"))) {
+            throw e; 
+        }
+        await wait(1000); 
         continue; 
     }
   }
-  throw new Error("Serwery AI są zajęte. Spróbuj za chwilę.");
+  
+  throw new Error("Wyczerpano limity dla wszystkich modeli. Odczekaj chwilę (ok. minuty) i spróbuj ponownie.");
 }
 
-// --- FUNKCJE EKSPORTOWANE ---
+// =================================================================
+// FUNKCJE EKSPORTOWANE
+// =================================================================
 
 export const generateMealPlan = async (config: any) => {
   const goalText = config.goalMode === 'cut' ? 'Redukcja' : 'Masa';
   console.log(`🚀 Generowanie Planu. Cel: ${config.targetCalories} kcal.`);
+  
   const prompt = `
     Jesteś dietetykiem. Plan na 1 dzień.
     Cel: ${config.targetCalories} kcal. Posiłków: ${config.mealCount}.
     Kuchnia: ${config.cuisine}. Wykluczenia: ${config.exclusions || "Brak"}.
-    Cel: ${goalText}.
-    Zasady: Znajdź przepisy i PRZELICZ gramaturę tak, aby suma kalorii = ${config.targetCalories}.
-    Zwróć TYLKO JSON:
+    Cel diety: ${goalText}.
+    
+    Zadanie: Dobierz przepisy i PRZELICZ gramatury tak, aby suma kalorii = ${config.targetCalories}.
+    Zwróć JSON:
     { "totalKcal": ${config.targetCalories}, "meals": [ { "name": "Nazwa", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] } ] }
   `;
   const aiData = await callGemini(prompt);
@@ -101,14 +129,14 @@ export const generateMealPlan = async (config: any) => {
 };
 
 export const swapMealItem = async (category: string, currentName: string, cuisine: string = 'Standard') => {
-  console.log(`🎲 Wymiana dania: ${currentName}`);
-  const prompt = `Wymień danie "${currentName}" (Kat: ${category}) na inne z kuchni ${cuisine}. Kaloryczność podobna. Zwróć JSON: { "name": "...", "category": "${category}", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
+  console.log(`🎲 Wymiana: ${currentName}`);
+  const prompt = `Wymień danie "${currentName}" (${category}) na inne (kuchnia: ${cuisine}). Kaloryczność podobna. Zwróć JSON: { "name": "...", "category": "${category}", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
   return await callGemini(prompt);
 };
 
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
   const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
-  const prompt = `Mam w lodówce: ${stock}. Wymyśl przepis obiadowy. Zwróć JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
+  const prompt = `Mam w lodówce: ${stock}. Przepis obiadowy. Zwróć JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
   return await callGemini(prompt);
 };
 
