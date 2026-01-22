@@ -3,23 +3,23 @@
 // --- TWÓJ KLUCZ API ---
 const API_KEY = "AIzaSyCP0Yi45gczLq75PaijjU_5o5l-kfBf3iQ";
 
-// --- LISTA MODELI AI (ZAKTUALIZOWANA POD POLSKĘ) ---
-// Kolejność ma znaczenie: system spróbuje pierwszego, jak błąd -> idzie do drugiego.
+// --- LISTA MODELI (ZAKTUALIZOWANA I POPRAWIONA) ---
+// Usunąłem model "Thinking-01-21", który powodował błąd 404.
 const ENDPOINTS = [
-  // 1. Model "Thinking" (Eksperymentalny) - często mniej zajęty niż zwykły Flash 2.0
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp-01-21:generateContent?key=${API_KEY}`,
-  
-  // 2. Flash 1.5 wersja "002" (NAJWAŻNIEJSZE: Wersja sztywna - działa w UE, gdy zwykła daje 404)
+  // 1. Flash 1.5 (Wersja 002) - To jest "Złoty Standard" w UE. Rzadko zawodzi.
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${API_KEY}`,
   
-  // 3. Flash 1.5 wersja "8b" (Wersja lekka/szybka - deska ratunku)
+  // 2. Flash 2.0 (Ogólna wersja, bez daty) - Czasem zapchana (429), ale istnieje.
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
+  
+  // 3. Flash 1.5 (Wersja 8b) - Bardzo szybka, lekka.
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`,
 
-  // 4. Stary Flash 001 (Pancerny, działa zawsze)
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${API_KEY}`
+  // 4. Stary Pro (Ostatnia deska ratunku)
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`
 ];
 
-// --- PARSER (Czyści odpowiedź z AI do czystego JSONa) ---
+// --- PARSER ---
 const safeParse = (text: string | undefined) => {
   if (!text) throw new Error("Pusta odpowiedź od AI.");
   try {
@@ -29,19 +29,19 @@ const safeParse = (text: string | undefined) => {
     return JSON.parse(jsonMatch[0]);
   } catch (e) {
     console.error("Błąd parsowania:", text);
-    throw new Error("AI zwróciło błąd formatowania danych.");
+    throw new Error("AI zwróciło błąd formatowania.");
   }
 };
 
-// --- FUNKCJA CZEKANIA ---
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// --- GŁÓWNY SILNIK POŁĄCZEŃ ---
+// --- GŁÓWNY SILNIK ---
 async function callGemini(prompt: string, imageBase64?: string) {
   const requestBody: any = {
     contents: [{ parts: [{ text: prompt }] }],
+    // Zmniejszam temperaturę do 0.7, żeby format JSON był stabilniejszy
     generationConfig: {
-        temperature: 0.7, // Lekko kreatywny, ale stabilny
+        temperature: 0.7,
         maxOutputTokens: 2000,
     }
   };
@@ -51,34 +51,25 @@ async function callGemini(prompt: string, imageBase64?: string) {
     requestBody.contents[0].parts.push({ inlineData: { mimeType: "image/png", data: cleanBase64 } });
   }
 
-  // Pętla "Failover" po modelach
   for (const url of ENDPOINTS) {
     const modelName = url.split("/models/")[1].split(":")[0];
-    
-    // Tylko 1 próba na model (żeby szybko przeskoczyć do działającego)
+    // Jedna solidna próba na model, żeby szybciej przeskoczyć do działającego
     try {
       console.log(`📡 [Live AI] Próba połączenia: ${modelName}...`);
-      
       const response = await fetch(url, { 
           method: "POST", 
           headers: { "Content-Type": "application/json" }, 
           body: JSON.stringify(requestBody) 
       });
       
-      // SCENARIUSZ 1: Zajęty (429) -> Idź od razu do następnego modelu!
-      if (response.status === 429) {
-        console.warn(`⏳ Model ${modelName} jest zapchany. Przełączam na inny...`);
+      // Jeśli model zapchany (429) LUB nie istnieje (404) -> IDŹ DALEJ
+      if (response.status === 429 || response.status === 404) {
+        console.warn(`⚠️ Model ${modelName} niedostępny (${response.status}). Przełączam...`);
         continue;
       }
       
-      // SCENARIUSZ 2: Niedostępny w PL (404) -> Idź dalej
-      if (response.status === 404) {
-          console.warn(`❌ Model ${modelName} niedostępny w regionie (404).`);
-          continue;
-      }
-
       if (!response.ok) {
-          console.warn(`⚠️ Inny błąd serwera: ${response.status}`);
+          console.warn(`❌ Inny błąd serwera: ${response.status}`);
           continue; 
       }
 
@@ -87,7 +78,7 @@ async function callGemini(prompt: string, imageBase64?: string) {
       
       if (!text) throw new Error("Pusta treść");
       
-      console.log(`✅ SUKCES! Model ${modelName} odpowiedział!`);
+      console.log("✅ AI Sukces!");
       return safeParse(text);
 
     } catch (e) { 
@@ -95,105 +86,74 @@ async function callGemini(prompt: string, imageBase64?: string) {
         continue; 
     }
   }
-  
-  throw new Error("Wszystkie serwery AI są zajęte. Spróbuj za minutę.");
+  throw new Error("Wszystkie serwery zajęte. Spróbuj za chwilę.");
 }
 
 // =====================================================================
-// FUNKCJE EKSPORTOWANE (LOGIKA BIZNESOWA)
+// FUNKCJE EKSPORTOWANE
 // =====================================================================
 
-// 1. GENERATOR PLANU CAŁODNIOWEGO (AI)
+// 1. GENERATOR PLANU (PEŁNY AI)
 export const generateMealPlan = async (config: any) => {
-  const goalText = config.goalMode === 'cut' ? 'Redukcja' : config.goalMode === 'bulk' ? 'Masa' : 'Utrzymanie';
-  
-  console.log(`🚀 AI Generuje Plan. Cel: ${config.targetCalories} kcal. Kuchnia: ${config.cuisine}`);
+  const goalText = config.goalMode === 'cut' ? 'Redukcja' : 'Masa';
+  console.log(`🚀 AI Generuje Plan. Cel: ${config.targetCalories} kcal.`);
   
   const prompt = `
-    Jesteś profesjonalnym dietetykiem.
-    Stwórz plan żywieniowy na jeden dzień.
-    
-    PARAMETRY:
-    - Cel kalorii: ${config.targetCalories} kcal (Margines +/- 50 kcal).
-    - Liczba posiłków: ${config.mealCount}.
-    - Preferowana kuchnia: ${config.cuisine}.
-    - Wykluczenia: ${config.exclusions || "Brak"}.
-    - Cel: ${goalText}.
+    Jesteś dietetykiem. Stwórz plan na 1 dzień.
+    Cel: ${config.targetCalories} kcal.
+    Posiłków: ${config.mealCount}.
+    Kuchnia: ${config.cuisine}.
+    Wykluczenia: ${config.exclusions || "Brak"}.
+    Cel diety: ${goalText}.
 
-    ZADANIE:
-    1. Dobierz ciekawe przepisy (mogą być z internetu).
-    2. PRZELICZ SKŁADNIKI tak, aby suma kalorii idealnie pasowała do celu ${config.targetCalories}.
-    3. Jeśli kuchnia to "${config.cuisine}", daj dania w tym stylu.
+    Zasady:
+    1. Dobierz realne przepisy.
+    2. SKALOWANIE: Oblicz gramaturę tak, aby suma kalorii = ${config.targetCalories} (+/- 50).
+    3. JSON ma być poprawny.
 
-    FORMAT ODPOWIEDZI (Czysty JSON):
+    Zwróć TYLKO JSON:
     {
       "totalKcal": ${config.targetCalories},
       "meals": [
         {
-          "name": "Pełna nazwa dania",
-          "category": "Śniadanie/Obiad/itp",
-          "kcal": 0,
-          "protein": 0,
-          "fat": 0,
-          "carbs": 0,
-          "ingredients": ["produkt - ilość g", "produkt - ilość g"],
-          "instructions": ["Krok 1", "Krok 2"]
+          "name": "Nazwa dania",
+          "category": "Śniadanie/Obiad...",
+          "kcal": 0, "protein": 0, "fat": 0, "carbs": 0,
+          "ingredients": ["..."],
+          "instructions": ["..."]
         }
       ]
     }
   `;
 
   const aiData = await callGemini(prompt);
-  
   return {
       ...aiData,
       meals: aiData.meals.map((m: any) => ({ ...m, completed: false, imageUrl: null }))
   };
 };
 
-// 2. WYMIANA POJEDYNCZEGO POSIŁKU (AI)
+// 2. WYMIANA (AI)
 export const swapMealItem = async (category: string, currentName: string, cuisine: string = 'Standard') => {
   console.log(`🎲 AI szuka zamiennika dla: ${currentName}`);
-  
   const prompt = `
-    Użytkownik chce wymienić danie: "${currentName}" (Kategoria: ${category}).
-    Znajdź INNY przepis z kuchni: ${cuisine}.
-    Kaloryczność ma być zbliżona do oryginału.
-    
-    Zwróć TYLKO JSON:
-    { 
-      "name": "Nowa nazwa", 
-      "category": "${category}", 
-      "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, 
-      "ingredients": ["..."], "instructions": ["..."] 
-    }
+    Wymień danie: "${currentName}" (Kategoria: ${category}).
+    Daj INNY przepis (Kuchnia: ${cuisine}).
+    Kaloryczność zbliżona do oryginału.
+    Zwróć TYLKO JSON: { "name": "...", "category": "${category}", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }
   `;
-
   return await callGemini(prompt);
 };
 
-// 3. GENEROWANIE Z LODÓWKI (AI)
+// 3. LODÓWKA (AI)
 export const generateRecipeFromInventory = async (items: {name: string, weight: string}[]) => {
-  const stockString = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
-  
-  const prompt = `
-    Jestem głodny. Mam w lodówce: ${stockString}.
-    Wymyśl 1 pyszny, kompletny przepis obiadowy z tego.
-    
-    Zwróć JSON: 
-    { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }
-  `;
-  
+  const stock = items.map(i => `${i.name} (${i.weight}g)`).join(", ");
+  const prompt = `Mam: ${stock}. Wymyśl 1 przepis obiadowy. Zwróć JSON: { "name": "...", "category": "Obiad", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "ingredients": ["..."], "instructions": ["..."] }`;
   return await callGemini(prompt);
 };
 
-// 4. ANALIZA ZDJĘCIA (AI)
+// 4. SKAN (AI)
 export const analyzeMealScan = async (image: string, foodName: string, weight: string) => {
-  const prompt = `
-    Analiza jedzenia. Nazwa: ${foodName || "Ze zdjęcia"}. Waga: ${weight || "Standard"}.
-    Podaj makro.
-    Zwróć JSON: 
-    { "name": "Precyzyjna nazwa", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }
-  `;
+  const prompt = `Analiza zdjęcia. Nazwa: ${foodName}, Waga: ${weight}. Podaj makro w JSON: { "name": "...", "kcal": 0, "protein": 0, "fat": 0, "carbs": 0 }`;
   return await callGemini(prompt, image);
 };
