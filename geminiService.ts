@@ -1,7 +1,7 @@
 // src/geminiService.ts
 
 // 🛑 PAMIĘTAJ: Tu musi być Twój NOWY klucz API
-const API_KEY = "TU_WKLEJ_SWOJ_NOWY_KLUCZ_Z_GOOGLE_AI_STUDIO"; 
+const API_KEY = "AIzaSyBKjQ4yUFcskCGrR8uWUpXKd_ufG4_Dqug"; 
 
 // --- LISTA MODELI (Kolejność: Od największego limitu do najmniejszego) ---
 const AVAILABLE_MODELS = [
